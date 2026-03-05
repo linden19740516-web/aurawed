@@ -275,7 +275,9 @@ export const storyTemplates: StoryTemplate[] = [
     description: '两个艺术灵魂的碰撞',
     loveStory: {
       meet: '一个艺术展览，你在一幅画前驻足',
-      firstDate: '一起去看了一个小众画展'
+      firstDate: '一起去看了一个小众画展',
+      confession: '在你帮我画像的那一刻，我确定你是对的人',
+      proposal: '在我们第一次相遇的画廊求婚'
     },
     meaningfulMoments: ['一起创作的作品', '艺术展上的共同回忆'],
     sharedInterests: ['艺术展览', '看展', '创作'],
