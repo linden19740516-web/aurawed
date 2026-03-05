@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings } from 'lucide-react'
+import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone, MessageCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 // 用户类型
@@ -24,11 +24,17 @@ const CITIES = [
 
 // 注册表单数据
 interface RegisterForm {
-  email: string
-  password: string
+  phone: string
+  verifyCode: string
   name: string
   city: string
   inviteCode?: string
+}
+
+// 登录表单数据
+interface LoginForm {
+  phone: string
+  verifyCode: string
 }
 
 export default function Home() {
@@ -36,21 +42,75 @@ export default function Home() {
   const [showRegister, setShowRegister] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
   const [registerForm, setRegisterForm] = useState<RegisterForm>({
-    email: '',
-    password: '',
+    phone: '',
+    verifyCode: '',
     name: '',
     city: '',
     inviteCode: ''
   })
+  const [loginForm, setLoginForm] = useState<LoginForm>({
+    phone: '',
+    verifyCode: ''
+  })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
+  const [codeSent, setCodeSent] = useState(false)
+  const [countdown, setCountdown] = useState(0)
+
+  // 倒计时
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [countdown])
 
   // 处理用户类型选择
   const handleTypeSelect = (type: 'couple' | 'planner') => {
     setUserType(type)
     setShowRegister(true)
+  }
+
+  // 发送验证码
+  const sendVerifyCode = async (phone: string, isLogin: boolean) => {
+    if (!phone || phone.length !== 11) {
+      setError('请输入正确的手机号')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
+    try {
+      // 使用手机号登录/注册
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        phone: phone
+      })
+
+      if (otpError) throw otpError
+
+      setCodeSent(true)
+      setCountdown(60)
+
+      // 如果是登录，检查是否需要注册
+      if (isLogin) {
+        // 检查用户是否已注册
+        const { data: existingUser } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('phone', phone)
+          .single()
+
+        if (!existingUser) {
+          setError('手机号未注册，请先注册')
+          setShowRegister(true)
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || '发送失败，请重试')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // 处理注册提交
@@ -60,21 +120,22 @@ export default function Home() {
     setError('')
 
     try {
-      // 调用 Supabase 注册
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: registerForm.email,
-        password: registerForm.password,
+      // 验证验证码
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        phone: registerForm.phone,
+        token: registerForm.verifyCode,
+        type: 'sms'
       })
 
-      if (authError) throw authError
+      if (verifyError) throw verifyError
 
       // 创建用户资料
-      if (authData.user) {
+      if (verifyData.user) {
         const { error: profileError } = await supabase
           .from('user_profiles')
           .insert({
-            id: authData.user.id,
-            email: registerForm.email,
+            id: verifyData.user.id,
+            phone: registerForm.phone,
             name: registerForm.name,
             user_type: userType,
             city: registerForm.city,
@@ -83,9 +144,10 @@ export default function Home() {
         if (profileError) console.error('创建资料失败:', profileError)
       }
 
-      // 保存用户信息到本地存储
+      // 保存用户信息
       localStorage.setItem('aurawed_user_type', userType || 'couple')
       localStorage.setItem('aurawed_user_city', registerForm.city)
+      localStorage.setItem('aurawed_user_phone', registerForm.phone)
 
       setShowRegister(false)
 
@@ -109,42 +171,54 @@ export default function Home() {
     setError('')
 
     try {
-      // 调用 Supabase 登录
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword,
+      // 验证验证码
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        phone: loginForm.phone,
+        token: loginForm.verifyCode,
+        type: 'sms'
       })
 
-      if (authError) throw authError
+      if (verifyError) throw verifyError
 
       // 获取用户资料
-      if (authData.user) {
+      if (verifyData.user) {
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('user_type, name')
-          .eq('id', authData.user.id)
+          .select('user_type, name, phone')
+          .eq('id', verifyData.user.id)
           .single()
 
-        const userType = profile?.user_type || 'couple'
+        const userTypeValue = profile?.user_type || 'couple'
 
         // 保存用户信息
-        localStorage.setItem('aurawed_user_type', userType)
+        localStorage.setItem('aurawed_user_type', userTypeValue)
         localStorage.setItem('aurawed_user_name', profile?.name || '')
+        localStorage.setItem('aurawed_user_phone', profile?.phone || '')
 
         // 根据用户类型跳转
-        if (userType === 'admin') {
+        if (userTypeValue === 'admin') {
           window.location.href = '/admin'
-        } else if (userType === 'planner') {
+        } else if (userTypeValue === 'planner') {
           window.location.href = '/planner'
         } else {
           window.location.href = '/couple'
         }
       }
     } catch (err: any) {
-      setError(err.message || '登录失败，请检查邮箱和密码')
+      setError(err.message || '登录失败，请检查验证码')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // 发送注册验证码
+  const handleSendRegisterCode = () => {
+    sendVerifyCode(registerForm.phone, false)
+  }
+
+  // 发送登录验证码
+  const handleSendLoginCode = () => {
+    sendVerifyCode(loginForm.phone, true)
   }
 
   return (
@@ -154,7 +228,6 @@ export default function Home() {
         <div className="glow-ambient top-[-200px] left-[-200px]" />
         <div className="glow-ambient bottom-[-200px] right-[-200px]" style={{ background: 'radial-gradient(circle, rgba(139, 69, 87, 0.06) 0%, transparent 70%)' }} />
 
-        {/* 浮动粒子效果 */}
         {[...Array(20)].map((_, i) => (
           <motion.div
             key={i}
@@ -203,7 +276,6 @@ export default function Home() {
 
       {/* 主内容 */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 pt-20">
-        {/* 标题区域 */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -240,7 +312,6 @@ export default function Home() {
           transition={{ delay: 0.4 }}
           className="grid md:grid-cols-2 gap-6 max-w-4xl w-full"
         >
-          {/* C端：新人入口 */}
           <motion.button
             onClick={() => handleTypeSelect('couple')}
             whileHover={{ scale: 1.02, y: -5 }}
@@ -265,11 +336,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 装饰线条 */}
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-aurora-rose to-aurora-rose-light transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
           </motion.button>
 
-          {/* B端：策划师入口 */}
           <motion.button
             onClick={() => handleTypeSelect('planner')}
             whileHover={{ scale: 1.02, y: -5 }}
@@ -294,12 +363,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 装饰线条 */}
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-aurora-gold to-aurora-gold-light transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
           </motion.button>
         </motion.div>
 
-        {/* 特性展示 */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -357,6 +424,46 @@ export default function Home() {
 
               <form onSubmit={handleRegister} className="space-y-5">
                 <div>
+                  <label className="block text-sm text-aurora-muted mb-2">手机号</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <input
+                      type="tel"
+                      required
+                      value={registerForm.phone}
+                      onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
+                      placeholder="请输入11位手机号"
+                      maxLength={11}
+                      className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-aurora-muted mb-2">验证码</label>
+                  <div className="relative">
+                    <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <input
+                      type="text"
+                      required
+                      value={registerForm.verifyCode}
+                      onChange={(e) => setRegisterForm({ ...registerForm, verifyCode: e.target.value })}
+                      placeholder="请输入6位验证码"
+                      maxLength={6}
+                      className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendRegisterCode}
+                      disabled={countdown > 0 || isLoading}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs text-aurora-gold hover:text-aurora-gold-light disabled:opacity-50"
+                    >
+                      {countdown > 0 ? `${countdown}秒` : '获取验证码'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-sm text-aurora-muted mb-2">姓名</label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
@@ -386,38 +493,6 @@ export default function Home() {
                         <option key={city} value={city} className="bg-gray-800">{city}</option>
                       ))}
                     </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-aurora-muted mb-2">邮箱</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
-                    <input
-                      type="email"
-                      required
-                      value={registerForm.email}
-                      onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-                      placeholder="your@email.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-aurora-muted mb-2">密码</label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
-                    <input
-                      type="password"
-                      required
-                      value={registerForm.password}
-                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-                      placeholder="至少8位密码"
-                      className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
-                    />
                   </div>
                 </div>
 
@@ -492,37 +567,47 @@ export default function Home() {
 
               <div className="text-center mb-8">
                 <h2 className="font-display text-3xl text-white mb-2">欢迎回来</h2>
-                <p className="text-aurora-muted">登录您的账号</p>
+                <p className="text-aurora-muted">手机号登录</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">邮箱</label>
+                  <label className="block text-sm text-aurora-muted mb-2">手机号</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="email"
+                      type="tel"
                       required
-                      placeholder="your@email.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
+                      value={loginForm.phone}
+                      onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
+                      placeholder="请输入11位手机号"
+                      maxLength={11}
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">密码</label>
+                  <label className="block text-sm text-aurora-muted mb-2">验证码</label>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="password"
+                      type="text"
                       required
-                      placeholder="请输入密码"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
+                      value={loginForm.verifyCode}
+                      onChange={(e) => setLoginForm({ ...loginForm, verifyCode: e.target.value })}
+                      placeholder="请输入6位验证码"
+                      maxLength={6}
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
+                    <button
+                      type="button"
+                      onClick={handleSendLoginCode}
+                      disabled={countdown > 0 || isLoading}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs text-aurora-gold hover:text-aurora-gold-light disabled:opacity-50"
+                    >
+                      {countdown > 0 ? `${countdown}秒` : '获取验证码'}
+                    </button>
                   </div>
                 </div>
 
