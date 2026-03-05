@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Crown, Users, FileText, CreditCard, MessageSquare, BarChart3, Settings,
   Search, Plus, MoreVertical, Check, X, Eye, Edit, Trash2, Send,
   ChevronLeft, LogOut, Shield, AlertCircle, CheckCircle, Clock,
-  DollarSign, Sparkles, Bell
+  DollarSign, Sparkles, Bell, RefreshCw
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 // 管理员侧边栏菜单
 const ADMIN_MENU = [
@@ -57,18 +58,74 @@ const MOCK_ANNOUNCEMENTS = [
 export default function AdminPage() {
   const [activeMenu, setActiveMenu] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [stats, setStats] = useState({
+    todayOrders: 0,
+    totalOrders: 0,
+    totalUsers: 0,
+    totalPlanners: 0,
+    pendingPlanners: 0,
+    activePlanners: 0
+  })
+  const [users, setUsers] = useState<any[]>([])
+  const [planners, setPlanners] = useState<any[]>([])
+  const [orders, setOrders] = useState<any[]>([])
+
+  // 从数据库获取数据
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      // 获取用户
+      const { data: allUsers } = await supabase
+        .from('user_profiles')
+        .select('*')
+
+      const allUsersData = allUsers || []
+      const plannersData = allUsersData.filter((u: any) => u.user_type === 'planner')
+      const pendingPlannersData = plannersData.filter((p: any) => !p.bio)
+      const activePlannersData = plannersData.filter((p: any) => p.bio)
+
+      setUsers(allUsersData)
+      setPlanners(plannersData)
+      setStats({
+        todayOrders: 0,
+        totalOrders: 0,
+        totalUsers: allUsersData.length,
+        totalPlanners: plannersData.length,
+        pendingPlanners: pendingPlannersData.length,
+        activePlanners: activePlannersData.length
+      })
+
+      // 获取婚礼项目
+      const { data: allOrders } = await supabase
+        .from('weddings')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      setOrders(allOrders || [])
+
+    } catch (error) {
+      console.error('获取数据失败:', error)
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
 
   // 渲染各个功能模块
   const renderContent = () => {
     switch (activeMenu) {
       case 'dashboard':
-        return <DashboardContent stats={MOCK_STATS} />
+        return <DashboardContent stats={stats} orders={orders} loading={loading} onRefresh={fetchData} />
       case 'users':
-        return <UsersContent users={MOCK_USERS} />
+        return <UsersContent users={users} />
       case 'planners':
-        return <PlannersContent planners={MOCK_PLANNERS} />
+        return <PlannersContent planners={planners} />
       case 'orders':
-        return <OrdersContent orders={MOCK_ORDERS} />
+        return <OrdersContent orders={orders} />
       case 'content':
         return <div className="text-center py-20"><Sparkles className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">内容管理</h3><p className="text-aurora-muted">AI生成内容管理功能...</p></div>
       case 'payments':
@@ -169,17 +226,27 @@ export default function AdminPage() {
 }
 
 // 数据概览
-function DashboardContent({ stats }: { stats: typeof MOCK_STATS }) {
+function DashboardContent({ stats, orders, loading, onRefresh }: { stats: typeof {todayOrders:0,totalOrders:0,totalUsers:0,totalPlanners:0,pendingPlanners:0,activePlanners:0}, orders: any[], loading: boolean, onRefresh: () => void }) {
   const statCards = [
-    { label: '今日订单', value: stats.todayOrders, icon: FileText, color: 'rose' },
-    { label: '总订单', value: stats.totalOrders, icon: CreditCard, color: 'gold' },
-    { label: '付费用户', value: stats.paidUsers, icon: Users, color: 'green' },
-    { label: 'API调用', value: stats.apiCalls, icon: Sparkles, color: 'purple' },
+    { label: '总用户', value: stats.totalUsers, icon: Users, color: 'rose' },
+    { label: '策划师', value: stats.totalPlanners, icon: Crown, color: 'gold' },
+    { label: '待审核', value: stats.pendingPlanners, icon: Clock, color: 'green' },
+    { label: '活跃策划师', value: stats.activePlanners, icon: CheckCircle, color: 'purple' },
   ]
 
   return (
     <div>
-      <h1 className="font-display text-3xl text-white mb-8">数据概览</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-3xl text-white">数据概览</h1>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>刷新</span>
+        </button>
+      </div>
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-4 gap-6 mb-8">
