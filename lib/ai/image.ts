@@ -5,7 +5,7 @@
 
 // Google Gemini 客户端
 async function getGeminiClient() {
-  const { GoogleGenerativeAI } = await import('@google/generativeai')
+  const { GoogleGenerativeAI } = await import('@google/generative-ai')
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GEMINI_IMAGE_API_KEY || '')
   return genAI
 }
