@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone, MessageCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone } from 'lucide-react'
 
 // 用户类型
-type UserType = 'couple' | 'planner' | null
+type UserType = 'couple' | 'planner' | 'admin' | null
 
 // 中国主要城市列表
 const CITIES = [
@@ -22,48 +21,42 @@ const CITIES = [
   '泰州市', '盐城市', '连云港市', '宿迁市', '舟山市'
 ]
 
-// 注册表单数据
-interface RegisterForm {
-  phone: string
-  verifyCode: string
-  name: string
-  city: string
-  inviteCode?: string
-}
-
-// 登录表单数据
-interface LoginForm {
-  phone: string
-  verifyCode: string
-}
+// 预定义的管理员账号
+const ADMIN_ACCOUNTS = [
+  { phone: '13800000000', password: 'admin123', name: '超级管理员' },
+]
 
 export default function Home() {
   const [userType, setUserType] = useState<UserType>(null)
   const [showRegister, setShowRegister] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
-  const [registerForm, setRegisterForm] = useState<RegisterForm>({
+  const [registerForm, setRegisterForm] = useState({
     phone: '',
-    verifyCode: '',
+    password: '',
     name: '',
     city: '',
     inviteCode: ''
   })
-  const [loginForm, setLoginForm] = useState<LoginForm>({
+  const [loginForm, setLoginForm] = useState({
     phone: '',
-    verifyCode: ''
+    password: ''
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
-  const [countdown, setCountdown] = useState(0)
 
-  // 倒计时
+  // 检查是否已登录
   useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
-      return () => clearTimeout(timer)
+    const savedType = localStorage.getItem('aurawed_user_type')
+    if (savedType) {
+      if (savedType === 'admin') {
+        window.location.href = '/admin'
+      } else if (savedType === 'planner') {
+        window.location.href = '/planner'
+      } else {
+        window.location.href = '/couple'
+      }
     }
-  }, [countdown])
+  }, [])
 
   // 处理用户类型选择
   const handleTypeSelect = (type: 'couple' | 'planner') => {
@@ -71,80 +64,28 @@ export default function Home() {
     setShowRegister(true)
   }
 
-  // 发送验证码
-  const sendVerifyCode = async (phone: string, isLogin: boolean) => {
-    if (!phone || phone.length !== 11) {
-      setError('请输入正确的手机号')
-      return
-    }
-
-    setIsLoading(true)
-    setError('')
-
-    try {
-      // 使用手机号登录/注册
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: phone
-      })
-
-      if (otpError) throw otpError
-
-      setCodeSent(true)
-      setCountdown(60)
-
-      // 如果是登录，检查是否需要注册
-      if (isLogin) {
-        // 检查用户是否已注册
-        const { data: existingUser } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('phone', phone)
-          .single()
-
-        if (!existingUser) {
-          setError('手机号未注册，请先注册')
-          setShowRegister(true)
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || '发送失败，请重试')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // 处理注册提交
+  // 处理注册
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
     try {
-      // 验证验证码
-      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-        phone: registerForm.phone,
-        token: registerForm.verifyCode,
-        type: 'sms'
-      })
-
-      if (verifyError) throw verifyError
-
-      // 创建用户资料
-      if (verifyData.user) {
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: verifyData.user.id,
-            phone: registerForm.phone,
-            name: registerForm.name,
-            user_type: userType,
-            city: registerForm.city,
-          })
-
-        if (profileError) console.error('创建资料失败:', profileError)
+      if (!registerForm.phone || !registerForm.password || !registerForm.name) {
+        setError('请填写完整信息')
+        return
       }
 
-      // 保存用户信息
+      // 存储用户信息到本地
+      const userData = {
+        phone: registerForm.phone,
+        name: registerForm.name,
+        userType: userType,
+        city: registerForm.city,
+        createdAt: new Date().toISOString()
+      }
+
+      localStorage.setItem('aurawed_user', JSON.stringify(userData))
       localStorage.setItem('aurawed_user_type', userType || 'couple')
       localStorage.setItem('aurawed_user_city', registerForm.city)
       localStorage.setItem('aurawed_user_phone', registerForm.phone)
@@ -157,8 +98,8 @@ export default function Home() {
       } else {
         window.location.href = '/planner'
       }
-    } catch (err: any) {
-      setError(err.message || '注册失败，请重试')
+    } catch (err) {
+      setError('注册失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -171,54 +112,57 @@ export default function Home() {
     setError('')
 
     try {
-      // 验证验证码
-      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-        phone: loginForm.phone,
-        token: loginForm.verifyCode,
-        type: 'sms'
-      })
+      if (!loginForm.phone || !loginForm.password) {
+        setError('请输入手机号和密码')
+        return
+      }
 
-      if (verifyError) throw verifyError
+      // 检查是否是管理员账号
+      const isAdmin = ADMIN_ACCOUNTS.some(
+        acc => acc.phone === loginForm.phone && acc.password === loginForm.password
+      )
 
-      // 获取用户资料
-      if (verifyData.user) {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('user_type, name, phone')
-          .eq('id', verifyData.user.id)
-          .single()
+      if (isAdmin) {
+        localStorage.setItem('aurawed_user', JSON.stringify({
+          phone: loginForm.phone,
+          name: '超级管理员',
+          userType: 'admin'
+        }))
+        localStorage.setItem('aurawed_user_type', 'admin')
+        localStorage.setItem('aurawed_user_phone', loginForm.phone)
+        window.location.href = '/admin'
+        return
+      }
 
-        const userTypeValue = profile?.user_type || 'couple'
+      // 检查是否是已注册用户
+      const savedUser = localStorage.getItem('aurawed_user')
+      if (savedUser) {
+        const userData = JSON.parse(savedUser)
+        if (userData.phone === loginForm.phone) {
+          localStorage.setItem('aurawed_user_type', userData.userType || 'couple')
+          localStorage.setItem('aurawed_user_city', userData.city || '')
+          localStorage.setItem('aurawed_user_phone', userData.phone)
 
-        // 保存用户信息
-        localStorage.setItem('aurawed_user_type', userTypeValue)
-        localStorage.setItem('aurawed_user_name', profile?.name || '')
-        localStorage.setItem('aurawed_user_phone', profile?.phone || '')
-
-        // 根据用户类型跳转
-        if (userTypeValue === 'admin') {
-          window.location.href = '/admin'
-        } else if (userTypeValue === 'planner') {
-          window.location.href = '/planner'
-        } else {
-          window.location.href = '/couple'
+          if (userData.userType === 'admin') {
+            window.location.href = '/admin'
+          } else if (userData.userType === 'planner') {
+            window.location.href = '/planner'
+          } else {
+            window.location.href = '/couple'
+          }
+          return
         }
       }
-    } catch (err: any) {
-      setError(err.message || '登录失败，请检查验证码')
+
+      setError('账号未注册，请先注册')
+      setShowLogin(false)
+      setShowRegister(true)
+      setUserType('couple')
+    } catch (err) {
+      setError('登录失败，请检查信息')
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // 发送注册验证码
-  const handleSendRegisterCode = () => {
-    sendVerifyCode(registerForm.phone, false)
-  }
-
-  // 发送登录验证码
-  const handleSendLoginCode = () => {
-    sendVerifyCode(loginForm.phone, true)
   }
 
   return (
@@ -440,26 +384,17 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">验证码</label>
+                  <label className="block text-sm text-aurora-muted mb-2">密码</label>
                   <div className="relative">
-                    <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="text"
+                      type="password"
                       required
-                      value={registerForm.verifyCode}
-                      onChange={(e) => setRegisterForm({ ...registerForm, verifyCode: e.target.value })}
-                      placeholder="请输入6位验证码"
-                      maxLength={6}
+                      value={registerForm.password}
+                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                      placeholder="请设置密码"
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
-                    <button
-                      type="button"
-                      onClick={handleSendRegisterCode}
-                      disabled={countdown > 0 || isLoading}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs text-aurora-gold hover:text-aurora-gold-light disabled:opacity-50"
-                    >
-                      {countdown > 0 ? `${countdown}秒` : '获取验证码'}
-                    </button>
                   </div>
                 </div>
 
@@ -567,7 +502,7 @@ export default function Home() {
 
               <div className="text-center mb-8">
                 <h2 className="font-display text-3xl text-white mb-2">欢迎回来</h2>
-                <p className="text-aurora-muted">手机号登录</p>
+                <p className="text-aurora-muted">账号登录</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-5">
@@ -580,34 +515,24 @@ export default function Home() {
                       required
                       value={loginForm.phone}
                       onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
-                      placeholder="请输入11位手机号"
-                      maxLength={11}
+                      placeholder="请输入手机号"
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">验证码</label>
+                  <label className="block text-sm text-aurora-muted mb-2">密码</label>
                   <div className="relative">
-                    <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="text"
+                      type="password"
                       required
-                      value={loginForm.verifyCode}
-                      onChange={(e) => setLoginForm({ ...loginForm, verifyCode: e.target.value })}
-                      placeholder="请输入6位验证码"
-                      maxLength={6}
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                      placeholder="请输入密码"
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
-                    <button
-                      type="button"
-                      onClick={handleSendLoginCode}
-                      disabled={countdown > 0 || isLoading}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs text-aurora-gold hover:text-aurora-gold-light disabled:opacity-50"
-                    >
-                      {countdown > 0 ? `${countdown}秒` : '获取验证码'}
-                    </button>
                   </div>
                 </div>
 
@@ -636,6 +561,12 @@ export default function Home() {
                   立即注册
                 </button>
               </p>
+
+              <div className="mt-6 p-4 bg-aurora-card rounded-lg">
+                <p className="text-aurora-muted text-xs text-center">
+                  管理员测试账号：13800000000 / admin123
+                </p>
+              </div>
             </motion.div>
           </motion.div>
         )}
