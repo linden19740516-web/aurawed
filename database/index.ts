@@ -82,16 +82,24 @@ export function getStoryTemplateById(id: string) {
   return storyTemplates.find(t => t.id === id)
 }
 
-// 导入
+// 从 design-data 导入
 import {
   colorPalettes,
   styleDirections,
   floralStyles,
   lightingDescriptions,
+} from './design-data'
+
+// 从 planner-data 导入
+import {
   budgetTemplates,
   timelineTemplates,
   areaTemplates,
   servicePackages,
+} from './planner-data'
+
+// 从 story-data 导入
+import {
   storyTemplates,
   generateLocalStory,
   styleToTags
