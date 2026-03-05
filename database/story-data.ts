@@ -257,7 +257,9 @@ export const storyTemplates: StoryTemplate[] = [
     description: '我们在健身房相遇，因为健康生活走到一起',
     loveStory: {
       meet: '健身房的器械区，你在做硬拉，我刚好在旁边',
-      firstDate: '一起晨跑后去吃早餐'
+      firstDate: '一起晨跑后去吃早餐',
+      confession: '在我跑不动想放弃的时候，你那句"再坚持一下"让我心动了',
+      proposal: '在你完成第一个半马终点，我拿着戒指等你'
     },
     meaningfulMoments: ['一起跑完马拉松', '互相监督健身', '改变生活习惯'],
     sharedInterests: ['健身运动', '跑步', '健康饮食'],
