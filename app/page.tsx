@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin } from 'lucide-react'
+import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 // 用户类型
 type UserType = 'couple' | 'planner' | null
@@ -43,6 +44,8 @@ export default function Home() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
 
   // 处理用户类型选择
   const handleTypeSelect = (type: 'couple' | 'planner') => {
@@ -57,24 +60,43 @@ export default function Home() {
     setError('')
 
     try {
-      // 这里调用 Supabase 注册 API
-      // 实际实现时连接后端
-      console.log('注册数据:', { ...registerForm, userType })
+      // 调用 Supabase 注册
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: registerForm.email,
+        password: registerForm.password,
+      })
 
-      // 保存城市到本地存储
+      if (authError) throw authError
+
+      // 创建用户资料
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from('user_profiles')
+          .insert({
+            id: authData.user.id,
+            email: registerForm.email,
+            name: registerForm.name,
+            user_type: userType,
+            city: registerForm.city,
+          })
+
+        if (profileError) console.error('创建资料失败:', profileError)
+      }
+
+      // 保存用户信息到本地存储
+      localStorage.setItem('aurawed_user_type', userType || 'couple')
       localStorage.setItem('aurawed_user_city', registerForm.city)
 
-      // 模拟注册成功
-      await new Promise(resolve => setTimeout(resolve, 1000))
       setShowRegister(false)
+
       // 跳转到对应端
       if (userType === 'couple') {
         window.location.href = '/couple'
       } else {
         window.location.href = '/planner'
       }
-    } catch (err) {
-      setError('注册失败，请重试')
+    } catch (err: any) {
+      setError(err.message || '注册失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -87,18 +109,39 @@ export default function Home() {
     setError('')
 
     try {
-      // 模拟登录
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // 调用 Supabase 登录
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword,
+      })
 
-      // 根据用户类型跳转
-      const storedType = localStorage.getItem('aurawed_user_type')
-      if (storedType === 'planner') {
-        window.location.href = '/planner'
-      } else {
-        window.location.href = '/couple'
+      if (authError) throw authError
+
+      // 获取用户资料
+      if (authData.user) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('user_type, name')
+          .eq('id', authData.user.id)
+          .single()
+
+        const userType = profile?.user_type || 'couple'
+
+        // 保存用户信息
+        localStorage.setItem('aurawed_user_type', userType)
+        localStorage.setItem('aurawed_user_name', profile?.name || '')
+
+        // 根据用户类型跳转
+        if (userType === 'admin') {
+          window.location.href = '/admin'
+        } else if (userType === 'planner') {
+          window.location.href = '/planner'
+        } else {
+          window.location.href = '/couple'
+        }
       }
-    } catch (err) {
-      setError('登录失败，请检查邮箱和密码')
+    } catch (err: any) {
+      setError(err.message || '登录失败，请检查邮箱和密码')
     } finally {
       setIsLoading(false)
     }
@@ -356,6 +399,8 @@ export default function Home() {
                       value={registerForm.email}
                       onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
                       placeholder="your@email.com"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
@@ -459,6 +504,8 @@ export default function Home() {
                       type="email"
                       required
                       placeholder="your@email.com"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
@@ -472,6 +519,8 @@ export default function Home() {
                       type="password"
                       required
                       placeholder="请输入密码"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
