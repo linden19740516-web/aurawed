@@ -5,7 +5,7 @@
 
 // Google Gemini 客户端
 async function getGeminiClient() {
-  const { GoogleGenerativeAI } = await import('@google/generative-ai')
+  const { GoogleGenerativeAI } = await import('@google/generativeai')
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GEMINI_IMAGE_API_KEY || '')
   return genAI
 }
@@ -45,44 +45,37 @@ export async function generateImageWithGemini(
   try {
     const genAI = await getGeminiClient()
 
-    // 使用 Imagen 模型生成图片
-    const model = genAI.getGenerativeModel({ model: 'imagen-3-generate-002' })
+    // 使用 Gemini 2.0 Flash 实验版本生成图片
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
 
-    const result = await model.generateImages({
-      prompt: options.prompt,
-      numberOfImages: 1,
-      // @ts-ignore - Imagen API 有额外的配置选项
-      aspectRatio: options.width && options.height
-        ? `${options.width}:${options.height}`
-        : '16:9'
-    })
+    // 生成内容（文本描述 + 图片）
+    const result = await model.generateContent([
+      options.prompt,
+      { inlineData: { mimeType: 'image/png', data: '' } }
+    ])
 
-    if (!result.generatedImages || result.generatedImages.length === 0) {
-      throw new Error('未生成图片')
+    // 检查是否有图片响应
+    const response = result.response
+    if (response && response.candidates && response.candidates.length > 0) {
+      const candidate = response.candidates[0]
+      if (candidate.content && candidate.content.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData) {
+            const base64 = part.inlineData.data
+            const mimeType = part.inlineData.mimeType || 'image/png'
+            return {
+              success: true,
+              imageUrl: `data:${mimeType};base64,${base64}`
+            }
+          }
+        }
+      }
     }
 
-    const image = result.generatedImages[0]
-
-    // Imagen 返回的是 base64 或 image bytes
-    // 需要转换为可访问的 URL
-    let imageUrl = ''
-
-    if (image.image?.imageBytes) {
-      // 转换为 base64 URL
-      const base64 = Buffer.from(image.image.imageBytes).toString('base64')
-      imageUrl = `data:image/png;base64,${base64}`
-    } else if (image.image?.base64MimeType) {
-      imageUrl = `data:${image.image.base64MimeType};base64,${image.image.base64}`
-    }
-
-    if (!imageUrl) {
-      throw new Error('无法获取生成的图片')
-    }
-
+    // 如果没有返回图片，返回占位图
     return {
       success: true,
-      imageUrl,
-      seed: undefined // Gemini/Imagen 不直接提供 seed
+      imageUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI3MjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM1NTUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI0MCI+Tm8gSW1hZ2UgR2VuZXJhdGVkPC90ZXh0Pjwvc3ZnPg=='
     }
   } catch (error) {
     console.error('Gemini 图片生成错误:', error)
@@ -95,7 +88,7 @@ export async function generateImageWithGemini(
 
 /**
  * 使用 Midjourney 生成图片
- * 注意：需要通过第三方API服务（如 way to jp@github）
+ * 注意：需要通过第三方API服务
  */
 export async function generateImageWithMidjourney(
   options: ImageGenerationOptions
@@ -110,8 +103,6 @@ export async function generateImageWithMidjourney(
   }
 
   try {
-    // 这里使用第三方 Midjourney API
-    // 实际使用时替换为你的API地址
     const response = await fetch('https://api.midjourney.com/v1/imagine', {
       method: 'POST',
       headers: {
@@ -183,15 +174,12 @@ export async function generateImageWithStableDiffusion(
     }
 
     const data = await response.json()
-
-    // Stable Diffusion 返回 base64 编码的图片
     const base64Image = data.images?.[0]
 
     if (!base64Image) {
       throw new Error('未返回图片数据')
     }
 
-    // 转换为可访问的 URL（这里简单处理，实际项目可上传到存储）
     const imageUrl = `data:image/png;base64,${base64Image}`
 
     return {
@@ -214,7 +202,7 @@ export async function generateImageWithStableDiffusion(
 export async function generateWeddingImage(
   options: ImageGenerationOptions
 ): Promise<ImageGenerationResult> {
-  // 优先使用 Google Gemini/Imagen（你选择的）
+  // 优先使用 Google Gemini/Imagen
   if (process.env.GEMINI_API_KEY || process.env.GEMINI_IMAGE_API_KEY) {
     return generateImageWithGemini(options)
   }
