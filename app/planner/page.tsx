@@ -7,6 +7,7 @@ import {
   Sparkles, Image, Download, Copy, RefreshCw, Trash2,
   ChevronRight, MoreVertical, LogOut
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 // 项目数据结构
 interface Project {
@@ -67,6 +68,13 @@ export default function PlannerPage() {
   const [activeTab, setActiveTab] = useState<'projects' | 'clients' | 'templates'>('projects')
   const [searchQuery, setSearchQuery] = useState('')
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS)
+
+  // 退出登录
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    localStorage.clear()
+    window.location.href = '/'
+  }
 
   // 筛选项目
   const filteredProjects = projects.filter(p =>
@@ -141,7 +149,10 @@ export default function PlannerPage() {
             <Settings className="w-5 h-5" />
             <span className="font-medium">设置</span>
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all"
+          >
             <LogOut className="w-5 h-5" />
             <span className="font-medium">退出登录</span>
           </button>

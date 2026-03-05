@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, FileText, MessageCircle, X } from 'lucide-react'
+import { Heart, Sparkles, ArrowRight, FileText, MessageCircle, X, LogOut, Settings } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function CouplePage() {
   const [showChoice, setShowChoice] = useState(true)
@@ -25,6 +26,13 @@ export default function CouplePage() {
     window.location.href = '/couple/story'
   }
 
+  // 退出登录
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    localStorage.clear()
+    window.location.href = '/'
+  }
+
   return (
     <main className="min-h-screen bg-luxury-dark relative overflow-hidden">
       {/* 背景装饰 */}
@@ -43,6 +51,15 @@ export default function CouplePage() {
             当前城市：{userCity}
           </div>
         )}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 text-aurora-muted hover:text-white transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>退出</span>
+          </button>
+        </div>
       </nav>
 
       {/* 主内容 */}
