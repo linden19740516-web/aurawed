@@ -114,16 +114,48 @@ export default function DemandPage() {
     setIsSubmitting(true)
 
     try {
-      // TODO: 调用API保存需求
-      console.log('提交需求:', form)
+      // 从本地存储获取城市作为兜底
+      let userCity = form.location || localStorage.getItem('aurawed_user_city') || '未知城市'
 
-      // 模拟提交
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // 调用创建订单API
+      const response = await fetch('/api/wedding/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `${form.scene === 'wedding' ? '婚礼' : '活动'}需求 - ${new Date().toLocaleDateString()}`,
+          city: userCity,
+          weddingDate: form.weddingDate || null,
+          budget: form.budget ? parseInt(form.budget.split('-')[0]) || 0 : 0,
+          guestCount: form.guestCount || 0,
+          needPlanner: true, // 默认需要分配策划师
+          tags: form.style.concat(form.elements, [form.mood]).filter(Boolean)
+        })
+      })
 
-      // 跳转到故事问答页面
-      window.location.href = '/couple/story'
-    } catch (error) {
+      if (!response.ok) {
+        throw new Error('创建需求失败')
+      }
+
+      const result = await response.json()
+
+      if (result.success) {
+        // 保存当前wedding_id到本地以便故事环节使用
+        localStorage.setItem('aurawed_current_wedding_id', result.wedding.id)
+
+        // 可选：将需求存入 wedding_stories 表以备后续方案生成使用
+        // ... (在复杂实现中可以添加另一个API进行保存)
+
+        // 跳转到故事问答页面
+        window.location.href = '/couple/story'
+      } else {
+        throw new Error(result.error || '创建需求失败')
+      }
+
+    } catch (error: any) {
       console.error('提交失败:', error)
+      alert(error.message || '提交失败，请稍后重试')
     } finally {
       setIsSubmitting(false)
     }

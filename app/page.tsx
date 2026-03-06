@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 // 用户类型
 type UserType = 'couple' | 'planner' | 'admin' | null
@@ -23,7 +24,7 @@ const CITIES = [
 
 // 预定义的管理员账号
 const ADMIN_ACCOUNTS = [
-  { phone: '13800000000', password: 'admin123', name: '超级管理员' },
+  { email: 'admin@aurawed.com', password: 'admin123', name: '超级管理员' },
 ]
 
 export default function Home() {
@@ -31,14 +32,14 @@ export default function Home() {
   const [showRegister, setShowRegister] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
   const [registerForm, setRegisterForm] = useState({
-    phone: '',
+    email: '',
     password: '',
     name: '',
     city: '',
     inviteCode: ''
   })
   const [loginForm, setLoginForm] = useState({
-    phone: '',
+    email: '',
     password: ''
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -71,24 +72,51 @@ export default function Home() {
     setError('')
 
     try {
-      if (!registerForm.phone || !registerForm.password || !registerForm.name) {
+      if (!registerForm.email || !registerForm.password || !registerForm.name) {
         setError('请填写完整信息')
         return
       }
 
-      // 存储用户信息到本地
-      const userData = {
-        phone: registerForm.phone,
-        name: registerForm.name,
-        userType: userType,
-        city: registerForm.city,
-        createdAt: new Date().toISOString()
+      // 验证邮箱格式
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(registerForm.email)) {
+        setError('请输入有效的邮箱地址')
+        return
       }
 
-      localStorage.setItem('aurawed_user', JSON.stringify(userData))
+      // 调用后端 API 注册 (跳过邮箱确认)
+      const response = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: registerForm.email,
+          password: registerForm.password,
+          name: registerForm.name,
+          city: registerForm.city,
+          userType: userType || 'couple',
+          inviteCode: registerForm.inviteCode
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || '注册失败')
+        return
+      }
+
+      // 注册成功，直接登录
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: registerForm.email,
+        password: registerForm.password,
+      })
+
+      if (authError) throw authError
+
+      // 保存信息到本地存储
       localStorage.setItem('aurawed_user_type', userType || 'couple')
+      localStorage.setItem('aurawed_user_name', registerForm.name)
       localStorage.setItem('aurawed_user_city', registerForm.city)
-      localStorage.setItem('aurawed_user_phone', registerForm.phone)
 
       setShowRegister(false)
 
@@ -98,8 +126,9 @@ export default function Home() {
       } else {
         window.location.href = '/planner'
       }
-    } catch (err) {
-      setError('注册失败，请重试')
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || '注册失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -112,54 +141,52 @@ export default function Home() {
     setError('')
 
     try {
-      if (!loginForm.phone || !loginForm.password) {
-        setError('请输入手机号和密码')
+      if (!loginForm.email || !loginForm.password) {
+        setError('请输入邮箱和密码')
         return
       }
 
-      // 检查是否是管理员账号
-      const isAdmin = ADMIN_ACCOUNTS.some(
-        acc => acc.phone === loginForm.phone && acc.password === loginForm.password
-      )
+      // 调用 Supabase 登录
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: loginForm.email,
+        password: loginForm.password,
+      })
 
-      if (isAdmin) {
-        localStorage.setItem('aurawed_user', JSON.stringify({
-          phone: loginForm.phone,
-          name: '超级管理员',
-          userType: 'admin'
-        }))
-        localStorage.setItem('aurawed_user_type', 'admin')
-        localStorage.setItem('aurawed_user_phone', loginForm.phone)
-        window.location.href = '/admin'
-        return
-      }
+      if (authError) throw authError
 
-      // 检查是否是已注册用户
-      const savedUser = localStorage.getItem('aurawed_user')
-      if (savedUser) {
-        const userData = JSON.parse(savedUser)
-        if (userData.phone === loginForm.phone) {
-          localStorage.setItem('aurawed_user_type', userData.userType || 'couple')
-          localStorage.setItem('aurawed_user_city', userData.city || '')
-          localStorage.setItem('aurawed_user_phone', userData.phone)
+      // 获取用户资料
+      if (authData.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('user_type, name, city')
+          .eq('id', authData.user.id)
+          .single()
 
-          if (userData.userType === 'admin') {
-            window.location.href = '/admin'
-          } else if (userData.userType === 'planner') {
-            window.location.href = '/planner'
-          } else {
-            window.location.href = '/couple'
-          }
-          return
+        if (profileError) throw profileError
+
+        const userTypeValue = profile?.user_type || 'couple'
+
+        // 保存用户信息
+        localStorage.setItem('aurawed_user_type', userTypeValue)
+        localStorage.setItem('aurawed_user_name', profile?.name || '')
+        localStorage.setItem('aurawed_user_city', profile?.city || '')
+
+        // 根据用户类型跳转
+        if (userTypeValue === 'admin') {
+          window.location.href = '/admin'
+        } else if (userTypeValue === 'planner') {
+          window.location.href = '/planner'
+        } else {
+          window.location.href = '/couple'
         }
       }
-
-      setError('账号未注册，请先注册')
-      setShowLogin(false)
-      setShowRegister(true)
-      setUserType('couple')
-    } catch (err) {
-      setError('登录失败，请检查信息')
+    } catch (err: any) {
+      console.error(err)
+      if (err.message?.includes('Invalid login credentials')) {
+        setError('邮箱或密码错误')
+      } else {
+        setError(err.message || '登录失败，请检查信息')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -368,16 +395,15 @@ export default function Home() {
 
               <form onSubmit={handleRegister} className="space-y-5">
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">手机号</label>
+                  <label className="block text-sm text-aurora-muted mb-2">邮箱</label>
                   <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="tel"
+                      type="email"
                       required
-                      value={registerForm.phone}
-                      onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
-                      placeholder="请输入11位手机号"
-                      maxLength={11}
+                      value={registerForm.email}
+                      onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                      placeholder="请输入邮箱地址"
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>
@@ -507,15 +533,15 @@ export default function Home() {
 
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
-                  <label className="block text-sm text-aurora-muted mb-2">手机号</label>
+                  <label className="block text-sm text-aurora-muted mb-2">邮箱</label>
                   <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-aurora-muted" />
                     <input
-                      type="tel"
+                      type="email"
                       required
-                      value={loginForm.phone}
-                      onChange={(e) => setLoginForm({ ...loginForm, phone: e.target.value })}
-                      placeholder="请输入手机号"
+                      value={loginForm.email}
+                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                      placeholder="请输入邮箱地址"
                       className="w-full pl-12 pr-4 py-3 rounded-xl input-luxury text-white placeholder:text-aurora-muted"
                     />
                   </div>

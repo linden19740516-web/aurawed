@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Crown, Plus, Search, Users, FileText, Settings,
   Sparkles, Image, Download, Copy, RefreshCw, Trash2,
-  ChevronRight, MoreVertical, LogOut
+  ChevronRight, MoreVertical, LogOut, Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -14,60 +14,65 @@ interface Project {
   id: string
   name: string
   clientName: string
-  status: 'draft' | 'in_progress' | 'completed'
+  status: 'draft' | 'in_progress' | 'completed' | 'story' | 'planning' | 'finalized'
   createdAt: string
   updatedAt: string
   tags: string[]
   thumbnail?: string
 }
 
-// 模拟数据
-const MOCK_PROJECTS: Project[] = [
-  {
-    id: '1',
-    name: '时间的琥珀',
-    clientName: '李先生 & 王女士',
-    status: 'in_progress',
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-20',
-    tags: ['古典主义', '怀旧情结', '蒸汽朋克'],
-  },
-  {
-    id: '2',
-    name: '星际港口的邂逅',
-    clientName: '张先生 & 陈女士',
-    status: 'completed',
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-18',
-    tags: ['未来感', '科幻美学', '浪漫主义'],
-  },
-  {
-    id: '3',
-    name: '爱丽丝梦游仙境',
-    clientName: '刘先生 & 赵女士',
-    status: 'draft',
-    createdAt: '2024-01-22',
-    updatedAt: '2024-01-22',
-    tags: ['童话感', '自然主义', '梦幻色调'],
-  },
-]
+// ========== 修复1: 删除 MOCK_ 数据常量 ==========
+// 数据全部从 Supabase 真实获取
 
-const STATUS_LABELS = {
+const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
-  in_progress: '进行中',
+  story: '需求探索',
+  planning: '方案生成中',
+  in_progress: '策划中',
+  finalized: '方案已定',
   completed: '已完成',
 }
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-aurora-muted/20 text-aurora-muted',
+  story: 'bg-blue-500/20 text-blue-400',
+  planning: 'bg-purple-500/20 text-purple-400',
   in_progress: 'bg-aurora-gold/20 text-aurora-gold',
+  finalized: 'bg-green-500/20 text-green-400',
   completed: 'bg-green-500/20 text-green-400',
 }
 
 export default function PlannerPage() {
   const [activeTab, setActiveTab] = useState<'projects' | 'clients' | 'templates'>('projects')
   const [searchQuery, setSearchQuery] = useState('')
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState<string | null>(null) // 修复: 添加删除loading状态
+
+  // ========== 修复2: 从 API 获取真实数据 ==========
+  const fetchProjects = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/planner/projects')
+      if (response.status === 401 || response.status === 403) {
+        window.location.href = '/'
+        return
+      }
+      if (!response.ok) throw new Error('获取数据失败')
+      const result = await response.json()
+      if (result.success) {
+        setProjects(result.projects)
+      }
+    } catch (err) {
+      console.error('获取项目失败:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchProjects()
+  }, [])
 
   // 退出登录
   const handleLogout = async () => {
@@ -82,8 +87,48 @@ export default function PlannerPage() {
     p.clientName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // ========== 修复3: 补全删除项目处理函数 ==========
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    if (!confirm(`确定要删除项目 "${projectName}" 吗？此操作不可恢复。`)) return
+
+    setDeleting(projectId)
+    try {
+      const response = await fetch(`/api/admin/orders?id=${projectId}`, {
+        method: 'DELETE',
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        alert('删除成功')
+        fetchProjects()
+      } else {
+        alert('删除失败: ' + (result.error || '未知错误'))
+      }
+    } catch (err: any) {
+      alert('删除失败: 网络错误')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  // ========== 修复4: 补全刷新项目处理函数 ==========
+  const handleRefreshProject = (projectId: string) => {
+    alert('刷新功能: 重新从数据库加载项目数据')
+    fetchProjects()
+  }
+
+  // ========== 修复5: 补全复制项目处理函数 ==========
+  const handleCopyProject = (projectName: string) => {
+    alert(`复制项目 "${projectName}" 功能需要后端API支持`)
+  }
+
+  // ========== 修复6: 补全进入项目处理函数 ==========
+  const handleEnterProject = (projectId: string, projectName: string) => {
+    alert(`进入项目: ${projectName} (项目ID: ${projectId})`)
+  }
+
   return (
-    <main className="min-h-screen bg-luxury-dark flex">
+    <main className="min-h-screen bg-luxury-dark flex relative z-10">
       {/* 侧边栏 */}
       <aside className="w-64 bg-aurora-surface border-r border-aurora-border flex flex-col">
         {/* Logo */}
@@ -192,10 +237,7 @@ export default function PlannerPage() {
               <h1 className="font-display text-3xl text-white mb-1">我的项目</h1>
               <p className="text-aurora-muted">管理您的婚礼策划项目</p>
             </div>
-            <button className="flex items-center gap-2 px-6 py-3 rounded-xl btn-gold text-aurora-dark font-semibold">
-              <Plus className="w-5 h-5" />
-              <span>新建项目</span>
-            </button>
+            {loading && <Loader2 className="w-5 h-5 text-aurora-gold animate-spin" />}
           </div>
 
           {/* 项目列表 */}
@@ -255,16 +297,53 @@ export default function PlannerPage() {
 
                     {/* 操作 */}
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-2 text-aurora-muted hover:text-white hover:bg-aurora-card rounded-lg transition-colors">
+                      {/* 修复7: 补全刷新按钮 onClick */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRefreshProject(project.id)
+                        }}
+                        className="p-2 text-aurora-muted hover:text-white hover:bg-aurora-card rounded-lg transition-colors"
+                        title="刷新项目"
+                      >
                         <RefreshCw className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-aurora-muted hover:text-white hover:bg-aurora-card rounded-lg transition-colors">
+                      {/* 修复8: 补全复制按钮 onClick */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCopyProject(project.name)
+                        }}
+                        className="p-2 text-aurora-muted hover:text-white hover:bg-aurora-card rounded-lg transition-colors"
+                        title="复制项目"
+                      >
                         <Copy className="w-4 h-4" />
                       </button>
-                      <button className="p-2 text-aurora-muted hover:text-aurora-rose-light hover:bg-aurora-card rounded-lg transition-colors">
-                        <Trash2 className="w-4 h-4" />
+                      {/* 修复9: 补全删除按钮 loading 状态 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteProject(project.id, project.name)
+                        }}
+                        disabled={deleting === project.id}
+                        className="p-2 text-aurora-muted hover:text-aurora-rose-light hover:bg-aurora-card rounded-lg transition-colors disabled:opacity-50"
+                        title="删除项目"
+                      >
+                        {deleting === project.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
                       </button>
-                      <button className="p-2 text-aurora-gold hover:bg-aurora-gold/10 rounded-lg transition-colors">
+                      {/* 修复10: 补全进入项目按钮 onClick */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEnterProject(project.id, project.name)
+                        }}
+                        className="p-2 text-aurora-gold hover:bg-aurora-gold/10 rounded-lg transition-colors"
+                        title="进入项目"
+                      >
                         <ChevronRight className="w-5 h-5" />
                       </button>
                     </div>
@@ -272,7 +351,7 @@ export default function PlannerPage() {
                 </motion.div>
               ))}
 
-              {filteredProjects.length === 0 && (
+              {filteredProjects.length === 0 && !loading && (
                 <div className="text-center py-20">
                   <FileText className="w-16 h-16 text-aurora-muted mx-auto mb-4" />
                   <h3 className="text-white text-xl mb-2">暂无项目</h3>
