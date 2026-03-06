@@ -29,7 +29,8 @@ export default function AdminPage() {
   const [activeMenu, setActiveMenu] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [deleting, setDeleting] = useState<string | null>(null) // 修复: 添加删除loading状态
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null) // 修复: 登录状态守卫
   const [stats, setStats] = useState({
     todayOrders: 0,
     totalOrders: 0,
@@ -42,11 +43,38 @@ export default function AdminPage() {
   const [planners, setPlanners] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
 
+  // ========== 修复: 登录状态守卫 - 防止重定向循环 ==========
+  useEffect(() => {
+    const checkAuth = async () => {
+      const savedType = localStorage.getItem('aurawed_user_type')
+      if (!savedType || savedType !== 'admin') {
+        window.location.href = '/'
+        return
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        localStorage.removeItem('aurawed_user_type')
+        window.location.href = '/'
+        return
+      }
+
+      setIsAuthorized(true)
+    }
+
+    checkAuth()
+  }, [])
+
   // ========== 修复2: 从后端 API 获取真实数据 ==========
   const fetchData = async () => {
     setLoading(true)
     try {
       const response = await fetch('/api/admin/dashboard')
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('aurawed_user_type')
+        window.location.href = '/'
+        return
+      }
       if (!response.ok) throw new Error('获取数据失败')
       const result = await response.json()
       if (result.success) {
@@ -64,8 +92,19 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (isAuthorized) {
+      fetchData()
+    }
+  }, [isAuthorized])
+
+  // 修复: 等待授权检查完成
+  if (isAuthorized === null) {
+    return (
+      <div className="min-h-screen bg-luxury-dark flex items-center justify-center">
+        <div className="text-white">验证中...</div>
+      </div>
+    )
+  }
 
   // 渲染各个功能模块
   const renderContent = () => {

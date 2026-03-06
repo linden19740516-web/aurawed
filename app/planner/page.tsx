@@ -47,7 +47,35 @@ export default function PlannerPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
-  const [deleting, setDeleting] = useState<string | null>(null) // 修复: 添加删除loading状态
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null) // 修复: 登录状态守卫
+
+  // ========== 修复: 登录状态守卫 - 防止重定向循环 ==========
+  useEffect(() => {
+    const checkAuth = async () => {
+      // 1. 检查localStorage是否有用户类型
+      const savedType = localStorage.getItem('aurawed_user_type')
+      if (!savedType || savedType !== 'planner') {
+        // 没有登录或不是策划师，跳转到首页
+        window.location.href = '/'
+        return
+      }
+
+      // 2. 验证Supabase session是否有效
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        // session过期，清除localStorage并跳转
+        localStorage.removeItem('aurawed_user_type')
+        window.location.href = '/'
+        return
+      }
+
+      // 3. 验证通过
+      setIsAuthorized(true)
+    }
+
+    checkAuth()
+  }, [])
 
   // ========== 修复2: 从 API 获取真实数据 ==========
   const fetchProjects = async () => {
@@ -55,6 +83,8 @@ export default function PlannerPage() {
     try {
       const response = await fetch('/api/planner/projects')
       if (response.status === 401 || response.status === 403) {
+        // API返回未授权，清除登录状态并跳转
+        localStorage.removeItem('aurawed_user_type')
         window.location.href = '/'
         return
       }
@@ -71,8 +101,20 @@ export default function PlannerPage() {
   }
 
   useEffect(() => {
-    fetchProjects()
-  }, [])
+    // 只有授权后才获取数据
+    if (isAuthorized) {
+      fetchProjects()
+    }
+  }, [isAuthorized])
+
+  // 修复: 等待授权检查完成，显示loading
+  if (isAuthorized === null) {
+    return (
+      <div className="min-h-screen bg-luxury-dark flex items-center justify-center">
+        <div className="text-white">验证中...</div>
+      </div>
+    )
+  }
 
   // 退出登录
   const handleLogout = async () => {

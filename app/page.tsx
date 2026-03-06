@@ -45,19 +45,31 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // 检查是否已登录
+  // 检查是否已登录 - 修复: 添加loading状态防止循环跳转
+  const [authReady, setAuthReady] = useState(false)
+
   useEffect(() => {
+    // 标记组件已挂载
+    setAuthReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!authReady) return // 等待组件挂载完成
+
     const savedType = localStorage.getItem('aurawed_user_type')
     if (savedType) {
-      if (savedType === 'admin') {
-        window.location.href = '/admin'
-      } else if (savedType === 'planner') {
-        window.location.href = '/planner'
-      } else {
-        window.location.href = '/couple'
-      }
+      // 延迟执行，确保不触发重定向循环
+      setTimeout(() => {
+        if (savedType === 'admin') {
+          window.location.href = '/admin'
+        } else if (savedType === 'planner') {
+          window.location.href = '/planner'
+        } else {
+          window.location.href = '/couple'
+        }
+      }, 100)
     }
-  }, [])
+  }, [authReady])
 
   // 处理用户类型选择
   const handleTypeSelect = (type: 'couple' | 'planner') => {
