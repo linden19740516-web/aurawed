@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { motion } from 'framer-motion'
 import { Lock, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react'
 import { resetPassword } from '@/lib/auth'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -186,5 +186,13 @@ export default function ResetPasswordPage() {
         </div>
       </motion.div>
     </main>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-aurora-dark">加载中...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }
