@@ -1,0 +1,1 @@
+{"name":"AI平台搭建4","schedule":{"type":"cron","expression":"*/1 * * * *"},"enabled":true}

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Crown, Plus, Search, Users, FileText, Settings,
   Sparkles, Image, Download, Copy, RefreshCw, Trash2,
-  ChevronRight, MoreVertical, LogOut, Loader2, Image
+  ChevronRight, MoreVertical, LogOut, Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
