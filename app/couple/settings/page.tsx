@@ -10,23 +10,23 @@ import {
 import { supabase, UserProfile } from '@/lib/supabase'
 import { updatePassword } from '@/lib/auth'
 
-// 预设个人标签
-const PERSONAL_TAGS = [
+// 默认个人标签（API 不可用时使用）
+const DEFAULT_PERSONAL_TAGS = [
   '浪漫主义', '完美主义', '简约控', '细节控', '浪漫主义者',
   '理想主义者', '务实的浪漫', '追求独特', '注重体验', 'Plan控'
 ]
 
-// 预设颜色偏好
-const COLOR_PREFERENCES = [
+// 默认颜色偏好（API 不可用时使用）
+const DEFAULT_COLOR_PREFERENCES = [
   '白色', '粉色', '红色', '金色', '银色', '蓝色', '绿色', '紫色',
   '橙色', '黄色', '香槟色', '裸色', '酒红色', '雾霾蓝', '莫兰迪色'
 ]
 
-// 预设场地类型
-const VENUE_TYPES = ['酒店', '户外', '教堂', '庭院', '餐厅', '海滩', '其他']
+// 默认场地类型（API 不可用时使用）
+const DEFAULT_VENUE_TYPES = ['酒店', '户外', '教堂', '庭院', '餐厅', '海滩', '其他']
 
-// 预设季节
-const SEASONS = ['春季', '夏季', '秋季', '冬季', '不限']
+// 默认季节（API 不可用时使用）
+const DEFAULT_SEASONS = ['春季', '夏季', '秋季', '冬季', '不限']
 
 export default function CoupleSettingsPage() {
   const [user, setUser] = useState<UserProfile | null>(null)
@@ -69,6 +69,19 @@ export default function CoupleSettingsPage() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
+  // 可配置标签状态
+  const [configurableTags, setConfigurableTags] = useState<{
+    personal: string[]
+    color: string[]
+    venue: string[]
+    season: string[]
+  }>({
+    personal: DEFAULT_PERSONAL_TAGS,
+    color: DEFAULT_COLOR_PREFERENCES,
+    venue: DEFAULT_VENUE_TYPES,
+    season: DEFAULT_SEASONS
+  })
+
   // 验证登录状态
   useEffect(() => {
     const checkAuth = async () => {
@@ -89,6 +102,28 @@ export default function CoupleSettingsPage() {
     }
 
     checkAuth()
+  }, [])
+
+  // 获取可配置标签
+  useEffect(() => {
+    const fetchConfigurableTags = async () => {
+      try {
+        const response = await fetch('/api/tags?types=personal,color,venue,season')
+        const result = await response.json()
+        if (result.success && result.grouped) {
+          setConfigurableTags({
+            personal: result.grouped.personal || DEFAULT_PERSONAL_TAGS,
+            color: result.grouped.color || DEFAULT_COLOR_PREFERENCES,
+            venue: result.grouped.venue || DEFAULT_VENUE_TYPES,
+            season: result.grouped.season || DEFAULT_SEASONS
+          })
+        }
+      } catch (error) {
+        console.error('获取标签失败:', error)
+      }
+    }
+
+    fetchConfigurableTags()
   }, [])
 
   // 获取用户信息
@@ -527,7 +562,7 @@ export default function CoupleSettingsPage() {
                   喜欢的颜色
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {COLOR_PREFERENCES.map(color => (
+                  {configurableTags.color.map(color => (
                     <button
                       key={color}
                       onClick={() => {
@@ -555,7 +590,7 @@ export default function CoupleSettingsPage() {
                   个人标签
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {PERSONAL_TAGS.map(tag => (
+                  {configurableTags.personal.map(tag => (
                     <button
                       key={tag}
                       onClick={() => {
@@ -583,7 +618,7 @@ export default function CoupleSettingsPage() {
                   偏好季节
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {SEASONS.map(season => (
+                  {configurableTags.season.map(season => (
                     <button
                       key={season}
                       onClick={() => {
@@ -611,7 +646,7 @@ export default function CoupleSettingsPage() {
                   偏好场地类型
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {VENUE_TYPES.map(type => (
+                  {configurableTags.venue.map(type => (
                     <button
                       key={type}
                       onClick={() => {

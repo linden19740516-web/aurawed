@@ -484,6 +484,103 @@ CREATE POLICY "Planners can manage own portfolio items"
     USING (auth.uid() = planner_id);
 
 -- ============================================
+-- 16. 可配置标签表（统一管理所有用户可选标签）
+-- ============================================
+CREATE TABLE IF NOT EXISTS configurable_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tag_type TEXT NOT NULL CHECK (tag_type IN (
+        'personal',      -- 新人个人标签
+        'color',         -- 颜色偏好（通用）
+        'venue',         -- 场地类型
+        'season',        -- 季节偏好
+        'style'          -- 策划师风格标签
+    )),
+    tag_name TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(tag_type, tag_name)
+);
+
+CREATE INDEX idx_configurable_tags_type ON configurable_tags(tag_type, is_active);
+
+-- RLS 策略 - 可配置标签
+ALTER TABLE configurable_tags ENABLE ROW LEVEL SECURITY;
+
+-- 所有人都可以查看标签
+CREATE POLICY "Anyone can view configurable tags"
+    ON configurable_tags FOR SELECT
+    USING (is_active = true);
+
+-- 只有管理员可以管理标签（通过 service role key）
+-- 前端不直接操作，通过 API
+
+-- ============================================
+-- 初始默认标签数据
+-- ============================================
+INSERT INTO configurable_tags (tag_type, tag_name, sort_order) VALUES
+-- 新人个人标签
+('personal', '浪漫主义', 1),
+('personal', '完美主义', 2),
+('personal', '简约控', 3),
+('personal', '细节控', 4),
+('personal', '理想主义者', 5),
+('personal', '务实的浪漫', 6),
+('personal', '追求独特', 7),
+('personal', '注重体验', 8),
+('personal', 'Plan控', 9),
+('personal', '颜值党', 10),
+-- 颜色偏好
+('color', '白色', 1),
+('color', '粉色', 2),
+('color', '红色', 3),
+('color', '金色', 4),
+('color', '银色', 5),
+('color', '蓝色', 6),
+('color', '绿色', 7),
+('color', '紫色', 8),
+('color', '橙色', 9),
+('color', '黄色', 10),
+('color', '香槟色', 11),
+('color', '裸色', 12),
+('color', '酒红色', 13),
+('color', '雾霾蓝', 14),
+('color', '莫兰迪色', 15),
+-- 场地类型
+('venue', '酒店', 1),
+('venue', '户外', 2),
+('venue', '教堂', 3),
+('venue', '庭院', 4),
+('venue', '餐厅', 5),
+('venue', '海滩', 6),
+('venue', '其他', 7),
+-- 季节偏好
+('season', '春季', 1),
+('season', '夏季', 2),
+('season', '秋季', 3),
+('season', '冬季', 4),
+('season', '不限', 5),
+-- 策划师风格标签
+('style', '浪漫', 1),
+('style', '梦幻', 2),
+('style', '简约', 3),
+('style', '复古', 4),
+('style', '中式', 5),
+('style', '韩式', 6),
+('style', '森系', 7),
+('style', '星空', 8),
+('style', '海洋', 9),
+('style', '田园', 10),
+('style', '古典', 11),
+('style', '现代', 12),
+('style', '唯美', 13),
+('style', 'ins风', 14),
+('style', '自然', 15),
+('style', '奢华', 16)
+ON CONFLICT (tag_type, tag_name) DO NOTHING;
+
+-- ============================================
 -- 更新触发器 (updated_at 自动更新)
 -- ============================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -520,6 +617,10 @@ CREATE TRIGGER update_user_settings_updated_at
 
 CREATE TRIGGER update_planner_portfolio_items_updated_at
     BEFORE UPDATE ON planner_portfolio_items
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_configurable_tags_updated_at
+    BEFORE UPDATE ON configurable_tags
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================

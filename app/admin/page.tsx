@@ -20,6 +20,7 @@ const ADMIN_MENU = [
   { id: 'payments', name: '支付流水', icon: CreditCard },
   { id: 'support', name: '客服/公告', icon: MessageSquare },
   { id: 'site_settings', name: '网站设置', icon: Settings },
+  { id: 'tags', name: '标签管理', icon: Sparkles },
   { id: 'settings', name: '系统设置', icon: Key },
 ]
 
@@ -52,6 +53,13 @@ export default function AdminPage() {
   const [siteSettings, setSiteSettings] = useState<any>({})
   const [siteSettingsLoading, setSiteSettingsLoading] = useState(false)
   const [siteSettingsSaving, setSiteSettingsSaving] = useState(false)
+
+  // 标签管理状态
+  const [tags, setTags] = useState<any[]>([])
+  const [tagsLoading, setTagsLoading] = useState(false)
+  const [tagsSaving, setTagsSaving] = useState(false)
+  const [editingTag, setEditingTag] = useState<any>(null)
+  const [showAddTagModal, setShowAddTagModal] = useState(false)
 
   // 用户同步状态
   const [syncLoading, setSyncLoading] = useState(false)
@@ -150,6 +158,97 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error('重置网站设置失败:', error)
+    }
+  }
+
+  // ========== 获取标签列表 ==========
+  const fetchTags = async () => {
+    setTagsLoading(true)
+    try {
+      const response = await fetch('/api/admin/configurable-tags')
+      const result = await response.json()
+      if (result.success) {
+        setTags(result.data || [])
+      }
+    } catch (error) {
+      console.error('获取标签列表失败:', error)
+    } finally {
+      setTagsLoading(false)
+    }
+  }
+
+  // ========== 保存标签 ==========
+  const saveTag = async (tag: any) => {
+    setTagsSaving(true)
+    try {
+      let response
+      if (tag.id) {
+        // 更新
+        response = await fetch(`/api/admin/configurable-tags?id=${tag.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tag)
+        })
+      } else {
+        // 创建
+        response = await fetch('/api/admin/configurable-tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tag)
+        })
+      }
+      const result = await response.json()
+      if (result.success) {
+        await fetchTags()
+        setShowAddTagModal(false)
+        setEditingTag(null)
+        alert(tag.id ? '标签已更新' : '标签已创建')
+      } else {
+        alert('保存失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('保存标签失败:', error)
+      alert('保存失败')
+    } finally {
+      setTagsSaving(false)
+    }
+  }
+
+  // ========== 删除标签 ==========
+  const deleteTag = async (id: string) => {
+    if (!confirm('确定要删除这个标签吗？')) return
+
+    try {
+      const response = await fetch(`/api/admin/configurable-tags?id=${id}`, {
+        method: 'DELETE'
+      })
+      const result = await response.json()
+      if (result.success) {
+        await fetchTags()
+        alert('标签已删除')
+      } else {
+        alert('删除失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('删除标签失败:', error)
+      alert('删除失败')
+    }
+  }
+
+  // ========== 切换标签状态 ==========
+  const toggleTagStatus = async (tag: any) => {
+    try {
+      const response = await fetch(`/api/admin/configurable-tags?id=${tag.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !tag.is_active })
+      })
+      const result = await response.json()
+      if (result.success) {
+        await fetchTags()
+      }
+    } catch (error) {
+      console.error('更新标签状态失败:', error)
     }
   }
 
@@ -265,6 +364,13 @@ export default function AdminPage() {
     }
   }, [activeMenu, isAuthorized])
 
+  // 当切换到标签管理页面时，获取标签列表
+  useEffect(() => {
+    if (activeMenu === 'tags' && isAuthorized) {
+      fetchTags()
+    }
+  }, [activeMenu, isAuthorized])
+
   // 修复: 等待授权检查完成
   if (isAuthorized === null) {
     return (
@@ -300,6 +406,22 @@ export default function AdminPage() {
             onSave={saveSiteSettings}
             onReset={resetSiteSettings}
             onRefresh={fetchSiteSettings}
+          />
+        )
+      case 'tags':
+        return (
+          <TagsManagementContent
+            tags={tags}
+            loading={tagsLoading}
+            saving={tagsSaving}
+            onSave={saveTag}
+            onDelete={deleteTag}
+            onToggleStatus={toggleTagStatus}
+            onRefresh={fetchTags}
+            showModal={showAddTagModal}
+            setShowModal={setShowAddTagModal}
+            editingTag={editingTag}
+            setEditingTag={setEditingTag}
           />
         )
       case 'settings':
@@ -1405,4 +1527,236 @@ function SiteSettingsContent({
       )}
     </div>
   )
+}
+
+// ========== 组件: 标签管理 ==========
+function TagsManagementContent({
+  tags,
+  loading,
+  saving,
+  onSave,
+  onDelete,
+  onToggleStatus,
+  onRefresh,
+  showModal,
+  setShowModal,
+  editingTag,
+  setEditingTag
+}: {
+  tags: any[],
+  loading: boolean,
+  saving: boolean,
+  onSave: (tag: any) => void,
+  onDelete: (id: string) => void,
+  onToggleStatus: (tag: any) => void,
+  onRefresh: () => void,
+  showModal: boolean,
+  setShowModal: (show: boolean) => void,
+  editingTag: any,
+  setEditingTag: (tag: any) => void
+}) {
+  const [localTags, setLocalTags] = useState<any[]>([])
+  const [filterType, setFilterType] = useState<string>('all')
+  const [formData, setFormData] = useState({ tag_type: 'personal', tag_name: '' })
+
+  useEffect(() => {
+    setLocalTags(tags)
+  }, [tags])
+
+  // 标签类型名称映射
+  const tagTypeNames: Record<string, string> = {
+    personal: '新人个人标签',
+    color: '颜色偏好',
+    venue: '场地类型',
+    season: '季节偏好',
+    style: '策划师风格'
+  }
+
+  // 过滤标签
+  const filteredTags = filterType === 'all'
+    ? localTags
+    : localTags.filter(t => t.tag_type === filterType)
+
+  // 按类型分组
+  const groupedTags = filteredTags.reduce((acc, tag) => {
+    if (!acc[tag.tag_type]) {
+      acc[tag.tag_type] = []
+    }
+    acc[tag.tag_type].push(tag)
+    return acc
+  }, {} as Record<string, any[]>)
+
+  // 打开添加弹窗
+  const handleOpenAdd = () => {
+    setFormData({ tag_type: 'personal', tag_name: '' })
+    setEditingTag(null)
+    setShowModal(true)
+  }
+
+  // 打开编辑弹窗
+  const handleOpenEdit = (tag: any) => {
+    setFormData({ tag_type: tag.tag_type, tag_name: tag.tag_name })
+    setEditingTag(tag)
+    setShowModal(true)
+  }
+
+  // 保存标签
+  const handleSave = () => {
+    if (!formData.tag_name.trim()) {
+      alert('请输入标签名称')
+      return
+    }
+    onSave({
+      id: editingTag?.id,
+      tag_type: formData.tag_type,
+      tag_name: formData.tag_name.trim()
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-3xl text-white">标签管理</h1>
+        <div className="flex items-center gap-4">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="px-4 py-2 rounded-xl bg-aurora-card border border-aurora-border text-white"
+          >
+            <option value="all">全部标签</option>
+            <option value="personal">新人个人标签</option>
+            <option value="color">颜色偏好</option>
+            <option value="venue">场地类型</option>
+            <option value="season">季节偏好</option>
+            <option value="style">策划师风格</option>
+          </select>
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            添加标签
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {Object.entries(groupedTags).map(([type, typeTags]) => (
+            <div key={type} className="p-6 rounded-xl card-luxury border border-aurora-border">
+              <h3 className="text-white font-medium text-lg mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                {tagTypeNames[type] || type}
+                <span className="text-aurora-muted text-sm font-normal">({typeTags.length}个)</span>
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {typeTags.map((tag) => (
+                  <div
+                    key={tag.id}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                      tag.is_active
+                        ? 'bg-aurora-card border-aurora-border text-white'
+                        : 'bg-aurora-card/50 border-aurora-border text-aurora-muted opacity-60'
+                    }`}
+                  >
+                    <span className="text-sm">{tag.tag_name}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(tag)}
+                        className="p-1 text-aurora-muted hover:text-white transition-colors"
+                        title="编辑"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onToggleStatus(tag)}
+                        className={`p-1 transition-colors ${
+                          tag.is_active ? 'text-green-500 hover:text-green-400' : 'text-aurora-muted hover:text-white'
+                        }`}
+                        title={tag.is_active ? '禁用' : '启用'}
+                      >
+                        {tag.is_active ? <CheckCircle className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => onDelete(tag.id)}
+                        className="p-1 text-red-500 hover:text-red-400 transition-colors"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 添加/编辑标签弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md p-6 rounded-2xl card-luxury"
+          >
+            <h2 className="font-display text-2xl text-white mb-6">
+              {editingTag ? '编辑标签' : '添加标签'}
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-aurora-muted mb-2">标签类型</label>
+                <select
+                  value={formData.tag_type}
+                  onChange={(e) => setFormData({ ...formData, tag_type: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white"
+                  disabled={!!editingTag}
+                >
+                  <option value="personal">新人个人标签</option>
+                  <option value="color">颜色偏好</option>
+                  <option value="venue">场地类型</option>
+                  <option value="season">季节偏好</option>
+                  <option value="style">策划师风格</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-aurora-muted mb-2">标签名称</label>
+                <input
+                  type="text"
+                  value={formData.tag_name}
+                  onChange={(e) => setFormData({ ...formData, tag_name: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted"
+                  placeholder="请输入标签名称"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={() => setShowModal(false)}
+                className="flex-1 py-3 rounded-xl border border-aurora-border text-white hover:bg-aurora-card transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-purple-500 text-white font-semibold hover:bg-purple-600 transition-colors disabled:opacity-50"
+              >
+                {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  )
+}
 }

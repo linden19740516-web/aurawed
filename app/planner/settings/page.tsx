@@ -11,14 +11,14 @@ import { supabase, UserProfile } from '@/lib/supabase'
 import { updatePassword } from '@/lib/auth'
 import Link from 'next/link'
 
-// 预设风格标签
-const STYLE_TAGS = [
+// 默认风格标签（API 不可用时使用）
+const DEFAULT_STYLE_TAGS = [
   '浪漫', '梦幻', '简约', '复古', '中式', '韩式', '森系', '星空',
   '海洋', '田园', '古典', '现代', '唯美', 'ins风', '自然', '奢华'
 ]
 
-// 预设颜色标签
-const COLOR_TAGS = [
+// 默认颜色标签（API 不可用时使用）
+const DEFAULT_COLOR_TAGS = [
   '白色', '粉色', '红色', '金色', '银色', '蓝色', '绿色', '紫色',
   '橙色', '黄色', '香槟色', '裸色', '酒红色', '雾霾蓝', '莫兰迪色'
 ]
@@ -57,6 +57,15 @@ export default function PlannerSettingsPage() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState(false)
 
+  // 可配置标签状态
+  const [configurableTags, setConfigurableTags] = useState<{
+    style: string[]
+    color: string[]
+  }>({
+    style: DEFAULT_STYLE_TAGS,
+    color: DEFAULT_COLOR_TAGS
+  })
+
   // 作品集
   const [portfolioItems, setPortfolioItems] = useState<any[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
@@ -82,6 +91,26 @@ export default function PlannerSettingsPage() {
     }
 
     checkAuth()
+  }, [])
+
+  // 获取可配置标签
+  useEffect(() => {
+    const fetchConfigurableTags = async () => {
+      try {
+        const response = await fetch('/api/tags?types=style,color')
+        const result = await response.json()
+        if (result.success && result.grouped) {
+          setConfigurableTags({
+            style: result.grouped.style || DEFAULT_STYLE_TAGS,
+            color: result.grouped.color || DEFAULT_COLOR_TAGS
+          })
+        }
+      } catch (error) {
+        console.error('获取标签失败:', error)
+      }
+    }
+
+    fetchConfigurableTags()
   }, [])
 
   // 获取用户信息
@@ -479,7 +508,7 @@ export default function PlannerSettingsPage() {
                   擅长风格
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {STYLE_TAGS.map(tag => (
+                  {configurableTags.style.map(tag => (
                     <button
                       key={tag}
                       onClick={() => {
@@ -507,7 +536,7 @@ export default function PlannerSettingsPage() {
                   偏好颜色
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {COLOR_TAGS.map(tag => (
+                  {configurableTags.color.map(tag => (
                     <button
                       key={tag}
                       onClick={() => {
@@ -952,7 +981,7 @@ function PortfolioModal({
           <div>
             <label className="block text-sm text-aurora-muted mb-2">风格标签</label>
             <div className="flex flex-wrap gap-2">
-              {STYLE_TAGS.map(tag => (
+              {configurableTags.style.map(tag => (
                 <button
                   key={tag}
                   type="button"
