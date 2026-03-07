@@ -484,7 +484,7 @@ export default function PlannerSettingsPage() {
                       key={tag}
                       onClick={() => {
                         const newTags = profileForm.style_tags.includes(tag)
-                          ? profileForm.style_tags.filter(t => t !== tag)
+                          ? profileForm.style_tags.filter((t: string) => t !== tag)
                           : [...profileForm.style_tags, tag]
                         setProfileForm({ ...profileForm, style_tags: newTags })
                       }}
@@ -512,7 +512,7 @@ export default function PlannerSettingsPage() {
                       key={tag}
                       onClick={() => {
                         const newTags = profileForm.color_tags.includes(tag)
-                          ? profileForm.color_tags.filter(t => t !== tag)
+                          ? profileForm.color_tags.filter((t: string) => t !== tag)
                           : [...profileForm.color_tags, tag]
                         setProfileForm({ ...profileForm, color_tags: newTags })
                       }}
@@ -958,7 +958,7 @@ function PortfolioModal({
                   type="button"
                   onClick={() => {
                     const newTags = form.style_tags.includes(tag)
-                      ? form.style_tags.filter(t => t !== tag)
+                      ? form.style_tags.filter((t: string) => t !== tag)
                       : [...form.style_tags, tag]
                     setForm({ ...form, style_tags: newTags })
                   }}
