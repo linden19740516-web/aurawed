@@ -42,8 +42,8 @@ export default function PlannerPublicPage({ params }: { params: { id: string } }
           .select('tag_name, tag_category')
           .eq('planner_id', params.id)
 
-        const styleTagsArray = styleTags?.filter(t => t.tag_category === 'style').map(t => t.tag_name) || []
-        const colorTagsArray = styleTags?.filter(t => t.tag_category === 'color').map(t => t.tag_name) || []
+        const styleTagsArray = styleTags?.filter((t: { tag_category: string }) => t.tag_category === 'style').map((t: { tag_name: string }) => t.tag_name) || []
+        const colorTagsArray = styleTags?.filter((t: { tag_category: string }) => t.tag_category === 'color').map((t: { tag_name: string }) => t.tag_name) || []
 
         // 获取公开作品集
         const { data: portfolioItems } = await supabase
