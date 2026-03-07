@@ -10,6 +10,9 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET() {
   const supabaseAdmin = getSupabaseAdmin()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ success: false, error: '服务器配置错误' }, { status: 500 })
+  }
 
   try {
     const { data, error } = await supabaseAdmin
@@ -32,6 +35,9 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   const supabaseAdmin = getSupabaseAdmin()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ success: false, error: '服务器配置错误' }, { status: 500 })
+  }
 
   try {
     const body = await request.json()
@@ -79,6 +85,9 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   const supabaseAdmin = getSupabaseAdmin()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ success: false, error: '服务器配置错误' }, { status: 500 })
+  }
 
   try {
     const { searchParams } = new URL(request.url)
@@ -128,6 +137,9 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   const supabaseAdmin = getSupabaseAdmin()
+  if (!supabaseAdmin) {
+    return NextResponse.json({ success: false, error: '服务器配置错误' }, { status: 500 })
+  }
 
   try {
     const { searchParams } = new URL(request.url)
