@@ -37,21 +37,32 @@ const DEFAULT_SETTINGS = {
 
 // 初始化默认设置到数据库
 async function initializeSettings(supabase: any) {
-  // 检查是否已有设置
-  const { data: existing } = await supabase
-    .from('site_settings')
-    .select('*')
-    .limit(1)
+  try {
+    // 检查是否已有设置
+    const { data: existing, error: selectError } = await supabase
+      .from('site_settings')
+      .select('*')
+      .limit(1)
 
-  if (!existing || existing.length === 0) {
-    // 插入默认设置
-    const settings = Object.entries(DEFAULT_SETTINGS).map(([key, value]) => ({
-      setting_key: key,
-      setting_value: value,
-      updated_at: new Date().toISOString()
-    }))
+    if (selectError) {
+      // 表不存在，忽略错误
+      console.log('site_settings table does not exist, will use default settings')
+      return
+    }
 
-    await supabase.from('site_settings').insert(settings)
+    if (!existing || existing.length === 0) {
+      // 插入默认设置
+      const settings = Object.entries(DEFAULT_SETTINGS).map(([key, value]) => ({
+        setting_key: key,
+        setting_value: value,
+        updated_at: new Date().toISOString()
+      }))
+
+      await supabase.from('site_settings').insert(settings)
+    }
+  } catch (e) {
+    // 表可能不存在，忽略
+    console.log('initializeSettings error:', e)
   }
 }
 
