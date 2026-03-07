@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: profilesError.message }, { status: 500 })
     }
 
-    const profileMap = new Map(profiles?.map((p: { id: string }) => [p.id, p]) || [])
+    const profileMap = new Map<string, { id: string; name?: string; user_type?: string }>(profiles?.map((p: { id: string }) => [p.id, p]) || [])
 
     // 合并数据
     const mergedUsers = authUsers.users.map(user => {
