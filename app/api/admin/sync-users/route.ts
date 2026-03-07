@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: profilesError.message }, { status: 500 })
     }
 
-    const profileIds = new Set(profiles?.map(p => p.id) || [])
+    const profileIds = new Set(profiles?.map((p: { id: string }) => p.id) || [])
     const authUserIds = new Set(authUsers.users.map(u => u.id))
 
     // 3. 找出需要同步的用户（在auth中存在但profile中不存在的）
