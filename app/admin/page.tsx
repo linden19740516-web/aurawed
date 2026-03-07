@@ -19,7 +19,8 @@ const ADMIN_MENU = [
   { id: 'content', name: '内容管理', icon: Sparkles },
   { id: 'payments', name: '支付流水', icon: CreditCard },
   { id: 'support', name: '客服/公告', icon: MessageSquare },
-  { id: 'settings', name: '系统设置', icon: Settings },
+  { id: 'site_settings', name: '网站设置', icon: Settings },
+  { id: 'settings', name: '系统设置', icon: Key },
 ]
 
 // ========== 修复1: 删除所有 MOCK_ 数据常量 ==========
@@ -46,6 +47,11 @@ export default function AdminPage() {
   const [apiConfigsLoading, setApiConfigsLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<string | null>(null)
   const [savingConfig, setSavingConfig] = useState<string | null>(null)
+
+  // 网站设置状态
+  const [siteSettings, setSiteSettings] = useState<any>({})
+  const [siteSettingsLoading, setSiteSettingsLoading] = useState(false)
+  const [siteSettingsSaving, setSiteSettingsSaving] = useState(false)
 
   // 用户同步状态
   const [syncLoading, setSyncLoading] = useState(false)
@@ -86,6 +92,64 @@ export default function AdminPage() {
       console.error('获取 API 配置失败:', error)
     } finally {
       setApiConfigsLoading(false)
+    }
+  }
+
+  // ========== 获取网站设置 ==========
+  const fetchSiteSettings = async () => {
+    setSiteSettingsLoading(true)
+    try {
+      const response = await fetch('/api/admin/site-settings')
+      const result = await response.json()
+      if (result.success) {
+        setSiteSettings(result.data)
+      }
+    } catch (error) {
+      console.error('获取网站设置失败:', error)
+    } finally {
+      setSiteSettingsLoading(false)
+    }
+  }
+
+  // ========== 保存网站设置 ==========
+  const saveSiteSettings = async (settings: any) => {
+    setSiteSettingsSaving(true)
+    try {
+      const response = await fetch('/api/admin/site-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings })
+      })
+      const result = await response.json()
+      if (result.success) {
+        setSiteSettings(result.data)
+        alert('网站设置已保存')
+      } else {
+        alert('保存失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('保存网站设置失败:', error)
+      alert('保存失败')
+    } finally {
+      setSiteSettingsSaving(false)
+    }
+  }
+
+  // ========== 重置网站设置 ==========
+  const resetSiteSettings = async () => {
+    if (!confirm('确定要重置为默认设置吗？')) return
+
+    try {
+      const response = await fetch('/api/admin/site-settings', {
+        method: 'POST'
+      })
+      const result = await response.json()
+      if (result.success) {
+        setSiteSettings(result.data)
+        alert('已重置为默认设置')
+      }
+    } catch (error) {
+      console.error('重置网站设置失败:', error)
     }
   }
 
@@ -194,6 +258,13 @@ export default function AdminPage() {
     }
   }, [activeMenu, isAuthorized])
 
+  // 当切换到网站设置页面时，获取设置
+  useEffect(() => {
+    if (activeMenu === 'site_settings' && isAuthorized) {
+      fetchSiteSettings()
+    }
+  }, [activeMenu, isAuthorized])
+
   // 修复: 等待授权检查完成
   if (isAuthorized === null) {
     return (
@@ -220,6 +291,17 @@ export default function AdminPage() {
         return <div className="text-center py-20"><CreditCard className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">支付流水</h3><p className="text-aurora-muted">支付订单管理...</p></div>
       case 'support':
         return <div className="text-center py-20"><MessageSquare className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">客服/公告</h3><p className="text-aurora-muted">公告管理功能...</p></div>
+      case 'site_settings':
+        return (
+          <SiteSettingsContent
+            settings={siteSettings}
+            loading={siteSettingsLoading}
+            saving={siteSettingsSaving}
+            onSave={saveSiteSettings}
+            onReset={resetSiteSettings}
+            onRefresh={fetchSiteSettings}
+          />
+        )
       case 'settings':
         return (
           <ApiSettingsContent
@@ -1149,6 +1231,178 @@ function ApiSettingsContent({
           <li>• <strong className="text-aurora-gold">飞书 Webhook</strong>: 接收订单通知（可选）</li>
         </ul>
       </div>
+    </div>
+  )
+}
+
+// ========== 组件: 网站设置 ==========
+function SiteSettingsContent({
+  settings,
+  loading,
+  saving,
+  onSave,
+  onReset,
+  onRefresh
+}: {
+  settings: any,
+  loading: boolean,
+  saving: boolean,
+  onSave: (settings: any) => void,
+  onReset: () => void,
+  onRefresh: () => void
+}) {
+  const [localSettings, setLocalSettings] = useState<any>({})
+
+  // 当设置加载完成时，初始化本地状态
+  useEffect(() => {
+    if (Object.keys(settings).length > 0) {
+      setLocalSettings(settings)
+    }
+  }, [settings])
+
+  const handleChange = (key: string, value: string) => {
+    setLocalSettings((prev: any) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = () => {
+    onSave(localSettings)
+  }
+
+  // 设置项分组
+  const settingGroups = [
+    {
+      title: '基础设置',
+      items: [
+        { key: 'brand_name', label: '品牌名称', placeholder: 'AuraWed' }
+      ]
+    },
+    {
+      title: '首页主区域',
+      items: [
+        { key: 'hero_tagline', label: '顶部标语', placeholder: 'AI 驱动的婚礼美学革命' },
+        { key: 'hero_title_1', label: '主标题（第1行）', placeholder: '让婚礼' },
+        { key: 'hero_title_2', label: '主标题（第2行）', placeholder: '成为一生的故事' },
+        { key: 'hero_subtitle_1', label: '副标题（第1行）', placeholder: '拒绝同质化堆砌...' },
+        { key: 'hero_subtitle_2', label: '副标题（第2行）', placeholder: '让每一个瞬间都充满意义' }
+      ]
+    },
+    {
+      title: '新人入口',
+      items: [
+        { key: 'couple_title', label: '标题', placeholder: '新人入口' },
+        { key: 'couple_description', label: '描述', placeholder: '开启一场沉浸式婚礼探索之旅...' },
+        { key: 'couple_button', label: '按钮文字', placeholder: '开始探索' }
+      ]
+    },
+    {
+      title: '策划师入口',
+      items: [
+        { key: 'planner_title', label: '标题', placeholder: '策划师入口' },
+        { key: 'planner_description', label: '描述', placeholder: '专业级美学提案引擎...' },
+        { key: 'planner_button', label: '按钮文字', placeholder: '专业入驻' }
+      ]
+    },
+    {
+      title: '作品集',
+      items: [
+        { key: 'portfolio_button', label: '按钮文字', placeholder: '浏览优秀作品' }
+      ]
+    },
+    {
+      title: '特性介绍',
+      items: [
+        { key: 'feature_1_title', label: '特性1标题', placeholder: 'AI 智能故事引擎' },
+        { key: 'feature_1_desc', label: '特性1描述', placeholder: '心理学驱动的需求挖掘' },
+        { key: 'feature_2_title', label: '特性2标题', placeholder: '独特美学标签' },
+        { key: 'feature_2_desc', label: '特性2描述', placeholder: '拒绝流水线式方案' },
+        { key: 'feature_3_title', label: '特性3标题', placeholder: 'B/C 端协同' },
+        { key: 'feature_3_desc', label: '特性3描述', placeholder: '新人与策划师的高效对接' }
+      ]
+    }
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-3xl text-white">网站设置</h1>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onReset}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-aurora-card text-aurora-muted hover:text-white"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>重置默认</span>
+          </button>
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>刷新</span>
+          </button>
+        </div>
+      </div>
+
+      {loading && Object.keys(settings).length === 0 ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* 实时预览提示 */}
+          <div className="mb-6 p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+            <div className="flex items-center gap-2 text-purple-400">
+              <Eye className="w-5 h-5" />
+              <span className="font-medium">保存后，首页将实时显示更新后的文字</span>
+            </div>
+          </div>
+
+          {/* 设置表单 */}
+          <div className="space-y-8">
+            {settingGroups.map((group) => (
+              <div key={group.title} className="p-6 rounded-xl card-luxury border border-aurora-border">
+                <h3 className="text-white font-medium text-lg mb-4">{group.title}</h3>
+                <div className="space-y-4">
+                  {group.items.map((item) => (
+                    <div key={item.key}>
+                      <label className="block text-sm text-aurora-muted mb-2">{item.label}</label>
+                      <input
+                        type="text"
+                        value={localSettings[item.key] || ''}
+                        onChange={(e) => handleChange(item.key, e.target.value)}
+                        placeholder={item.placeholder}
+                        className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 保存按钮 */}
+          <div className="mt-8 flex justify-end">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl btn-gold text-aurora-dark font-semibold disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>保存中...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-5 h-5" />
+                  <span>保存设置</span>
+                </>
+              )}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -27,6 +27,29 @@ const ADMIN_ACCOUNTS = [
   { email: 'admin@aurawed.com', password: 'admin123', name: '超级管理员' },
 ]
 
+// 默认网站设置
+const DEFAULT_SETTINGS = {
+  brand_name: 'AuraWed',
+  hero_tagline: 'AI 驱动的婚礼美学革命',
+  hero_title_1: '让婚礼',
+  hero_title_2: '成为一生的故事',
+  hero_subtitle_1: '拒绝同质化堆砌，用心理学构建具有叙事感的婚礼方案',
+  hero_subtitle_2: '让每一个瞬间都充满意义',
+  couple_title: '新人入口',
+  couple_description: '开启一场沉浸式婚礼探索之旅，通过心理学故事发现您独一无二的婚礼美学',
+  couple_button: '开始探索',
+  planner_title: '策划师入口',
+  planner_description: '专业级美学提案引擎，为您的客户提供独特且富有叙事感的高级婚礼方案',
+  planner_button: '专业入驻',
+  portfolio_button: '浏览优秀作品',
+  feature_1_title: 'AI 智能故事引擎',
+  feature_1_desc: '心理学驱动的需求挖掘',
+  feature_2_title: '独特美学标签',
+  feature_2_desc: '拒绝流水线式方案',
+  feature_3_title: 'B/C 端协同',
+  feature_3_desc: '新人与策划师的高效对接'
+}
+
 export default function Home() {
   const [userType, setUserType] = useState<UserType>(null)
   const [showRegister, setShowRegister] = useState(false)
@@ -45,8 +68,27 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // 网站设置
+  const [siteSettings, setSiteSettings] = useState(DEFAULT_SETTINGS)
+
   // 检查是否已登录 - 修复: 添加loading状态防止循环跳转
   const [authReady, setAuthReady] = useState(false)
+
+  // 获取网站设置
+  useEffect(() => {
+    const fetchSiteSettings = async () => {
+      try {
+        const response = await fetch('/api/site-settings')
+        const result = await response.json()
+        if (result.success && result.data) {
+          setSiteSettings(result.data)
+        }
+      } catch (error) {
+        console.error('获取网站设置失败:', error)
+      }
+    }
+    fetchSiteSettings()
+  }, [])
 
   useEffect(() => {
     // 标记组件已挂载
@@ -240,7 +282,7 @@ export default function Home() {
           className="flex items-center gap-3"
         >
           <Heart className="w-8 h-8 text-aurora-gold" />
-          <span className="font-display text-2xl text-gold font-semibold tracking-wide">AuraWed</span>
+          <span className="font-display text-2xl text-gold font-semibold tracking-wide">{siteSettings.brand_name || 'AuraWed'}</span>
         </motion.div>
 
         <motion.div
@@ -272,19 +314,19 @@ export default function Home() {
             className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full border border-aurora-gold/20 bg-aurora-gold/5"
           >
             <Sparkles className="w-4 h-4 text-aurora-gold" />
-            <span className="text-sm text-aurora-gold-light">AI 驱动的婚礼美学革命</span>
+            <span className="text-sm text-aurora-gold-light">{siteSettings.hero_tagline || 'AI 驱动的婚礼美学革命'}</span>
           </motion.div>
 
           <h1 className="font-display text-5xl md:text-7xl mb-6 leading-tight">
-            <span className="text-gold">让婚礼</span>
+            <span className="text-gold">{siteSettings.hero_title_1 || '让婚礼'}</span>
             <br />
-            <span className="text-white/90">成为一生的故事</span>
+            <span className="text-white/90">{siteSettings.hero_title_2 || '成为一生的故事'}</span>
           </h1>
 
           <p className="text-aurora-muted text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-            拒绝同质化堆砌，用心理学构建具有叙事感的婚礼方案
+            {siteSettings.hero_subtitle_1 || '拒绝同质化堆砌，用心理学构建具有叙事感的婚礼方案'}
             <br />
-            <span className="text-aurora-rose-light">让每一个瞬间都充满意义</span>
+            <span className="text-aurora-rose-light">{siteSettings.hero_subtitle_2 || '让每一个瞬间都充满意义'}</span>
           </p>
         </motion.div>
 
@@ -308,13 +350,13 @@ export default function Home() {
                 <Heart className="w-7 h-7 text-aurora-rose-light" />
               </div>
 
-              <h3 className="font-display text-2xl text-white mb-2">新人入口</h3>
+              <h3 className="font-display text-2xl text-white mb-2">{siteSettings.couple_title || '新人入口'}</h3>
               <p className="text-aurora-muted mb-6">
-                开启一场沉浸式婚礼探索之旅，通过心理学故事发现您独一无二的婚礼美学
+                {siteSettings.couple_description || '开启一场沉浸式婚礼探索之旅，通过心理学故事发现您独一无二的婚礼美学'}
               </p>
 
               <div className="flex items-center text-aurora-rose-light group-hover:translate-x-2 transition-transform duration-300">
-                <span className="font-medium">开始探索</span>
+                <span className="font-medium">{siteSettings.couple_button || '开始探索'}</span>
                 <ArrowRight className="w-4 h-4 ml-2" />
               </div>
             </div>
@@ -335,13 +377,13 @@ export default function Home() {
                 <Crown className="w-7 h-7 text-aurora-gold" />
               </div>
 
-              <h3 className="font-display text-2xl text-white mb-2">策划师入口</h3>
+              <h3 className="font-display text-2xl text-white mb-2">{siteSettings.planner_title || '策划师入口'}</h3>
               <p className="text-aurora-muted mb-6">
-                专业级美学提案引擎，为您的客户提供独特且富有叙事感的高级婚礼方案
+                {siteSettings.planner_description || '专业级美学提案引擎，为您的客户提供独特且富有叙事感的高级婚礼方案'}
               </p>
 
               <div className="flex items-center text-aurora-gold group-hover:translate-x-2 transition-transform duration-300">
-                <span className="font-medium">专业入驻</span>
+                <span className="font-medium">{siteSettings.planner_button || '专业入驻'}</span>
                 <ArrowRight className="w-4 h-4 ml-2" />
               </div>
             </div>
@@ -363,7 +405,7 @@ export default function Home() {
           >
             <div className="absolute inset-0 bg-gradient-to-r from-aurora-gold/5 to-aurora-rose/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
             <Image className="w-6 h-6 text-aurora-gold" />
-            <span className="text-white font-medium">浏览优秀作品</span>
+            <span className="text-white font-medium">{siteSettings.portfolio_button || '浏览优秀作品'}</span>
             <ArrowRight className="w-4 h-4 text-aurora-gold group-hover:translate-x-1 transition-transform" />
           </button>
         </motion.div>
@@ -375,9 +417,9 @@ export default function Home() {
           className="mt-20 flex flex-wrap justify-center gap-8 text-center"
         >
           {[
-            { icon: Sparkles, label: 'AI 智能故事引擎', desc: '心理学驱动的需求挖掘' },
-            { icon: Heart, label: '独特美学标签', desc: '拒绝流水线式方案' },
-            { icon: Users, label: 'B/C 端协同', desc: '新人与策划师的高效对接' },
+            { icon: Sparkles, label: siteSettings.feature_1_title || 'AI 智能故事引擎', desc: siteSettings.feature_1_desc || '心理学驱动的需求挖掘' },
+            { icon: Heart, label: siteSettings.feature_2_title || '独特美学标签', desc: siteSettings.feature_2_desc || '拒绝流水线式方案' },
+            { icon: Users, label: siteSettings.feature_3_title || 'B/C 端协同', desc: siteSettings.feature_3_desc || '新人与策划师的高效对接' },
           ].map((item, i) => (
             <div key={i} className="flex flex-col items-center px-6">
               <item.icon className="w-6 h-6 text-aurora-gold/60 mb-2" />
