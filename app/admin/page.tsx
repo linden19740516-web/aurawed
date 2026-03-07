@@ -47,6 +47,10 @@ export default function AdminPage() {
   const [editingConfig, setEditingConfig] = useState<string | null>(null)
   const [savingConfig, setSavingConfig] = useState<string | null>(null)
 
+  // 用户同步状态
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncStats, setSyncStats] = useState<{ total_auth: number; total_profiles: number; missing_profiles: number } | null>(null)
+
   // ========== 修复: 登录状态守卫 - 防止重定向循环 ==========
   useEffect(() => {
     const checkAuth = async () => {
@@ -137,9 +141,49 @@ export default function AdminPage() {
     }
   }
 
+  // ========== 同步用户数据 ==========
+  const syncUsers = async () => {
+    setSyncLoading(true)
+    try {
+      const response = await fetch('/api/admin/sync-users', { method: 'POST' })
+      const result = await response.json()
+      if (result.success) {
+        alert(result.message)
+        fetchData() // 刷新数据
+        // 获取同步状态
+        const statsRes = await fetch('/api/admin/sync-users')
+        const statsData = await statsRes.json()
+        if (statsData.success) {
+          setSyncStats(statsData.stats)
+        }
+      } else {
+        alert('同步失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('同步用户失败:', error)
+      alert('同步失败')
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
+  // 获取同步状态
+  const fetchSyncStats = async () => {
+    try {
+      const response = await fetch('/api/admin/sync-users')
+      const result = await response.json()
+      if (result.success) {
+        setSyncStats(result.stats)
+      }
+    } catch (error) {
+      console.error('获取同步状态失败:', error)
+    }
+  }
+
   useEffect(() => {
     if (isAuthorized) {
       fetchData()
+      fetchSyncStats()
     }
   }, [isAuthorized])
 
@@ -165,7 +209,7 @@ export default function AdminPage() {
       case 'dashboard':
         return <DashboardContent stats={stats} orders={orders} loading={loading} onRefresh={fetchData} />
       case 'users':
-        return <UsersContent users={users} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} />
+        return <UsersContent users={users} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} syncStats={syncStats} onSync={syncUsers} />
       case 'planners':
         return <PlannersContent planners={planners} onRefresh={fetchData} />
       case 'orders':
@@ -357,8 +401,8 @@ function DashboardContent({ stats, orders, loading, onRefresh }: { stats: any, o
 }
 
 // ========== 组件: 用户管理 (修复: 完整删除功能) ==========
-function UsersContent({ users, loading, deleting, onRefresh, setDeleting }: {
-  users: any[], loading: boolean, deleting: string | null, onRefresh: () => void, setDeleting: (id: string | null) => void
+function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncStats, onSync }: {
+  users: any[], loading: boolean, deleting: string | null, onRefresh: () => void, setDeleting: (id: string | null) => void, syncStats?: { total_auth: number; total_profiles: number; missing_profiles: number } | null, onSync?: () => void
 }) {
   // ========== 修复3: 补全删除用户处理函数 ==========
   const handleDeleteUser = async (id: string, name: string) => {
@@ -401,7 +445,25 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting }: {
     <div>
       <div className="flex items-center justify-between mb-8">
         <h1 className="font-display text-3xl text-white">用户管理</h1>
-        {loading && <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />}
+        <div className="flex items-center gap-4">
+          {/* 同步状态提示 */}
+          {syncStats && syncStats.missing_profiles > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{syncStats.missing_profiles} 个用户未同步</span>
+            </div>
+          )}
+          {/* 同步按钮 */}
+          <button
+            onClick={onSync}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>同步用户</span>
+          </button>
+          {loading && <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />}
+        </div>
       </div>
 
       <div className="card-luxury rounded-xl overflow-hidden">
@@ -482,6 +544,54 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting }: {
 
 // ========== 组件: 策划师管理 ==========
 function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: () => void }) {
+  const [editingPlanner, setEditingPlanner] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+
+  // 开始编辑
+  const handleStartEdit = (planner: any) => {
+    setEditingPlanner(planner.id)
+    setEditForm({
+      name: planner.name || '',
+      city: planner.city || '',
+      company_name: planner.company_name || '',
+      bio: planner.bio || '',
+      service_price: planner.service_price || 0,
+      status: planner.status || 'active'
+    })
+  }
+
+  // 取消编辑
+  const handleCancelEdit = () => {
+    setEditingPlanner(null)
+    setEditForm({})
+  }
+
+  // 保存编辑
+  const handleSaveEdit = async (plannerId: string) => {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/admin/users?id=${plannerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      })
+      const result = await response.json()
+      if (result.success) {
+        alert('保存成功')
+        setEditingPlanner(null)
+        onRefresh()
+      } else {
+        alert('保存失败: ' + (result.error || '未知错误'))
+      }
+    } catch (error) {
+      console.error('保存策划师失败:', error)
+      alert('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -491,34 +601,118 @@ function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: 
       <div className="grid gap-4">
         {planners.map((planner) => (
           <div key={planner.id} className="p-6 rounded-xl card-luxury border border-aurora-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-aurora-gold/20 flex items-center justify-center">
-                  <Crown className="w-7 h-7 text-aurora-gold" />
+            {editingPlanner === planner.id ? (
+              // 编辑模式
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-1">姓名</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-1">城市</label>
+                    <input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-1">公司/工作室</label>
+                    <input
+                      type="text"
+                      value={editForm.company_name}
+                      onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-1">服务价格</label>
+                    <input
+                      type="number"
+                      value={editForm.service_price}
+                      onChange={(e) => setEditForm({ ...editForm, service_price: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <div className="text-white font-medium text-lg">{planner.name}</div>
-                  <div className="text-aurora-muted text-sm">{planner.company_name || '个人工作室'} · {planner.city || '未知'}</div>
+                  <label className="block text-sm text-aurora-muted mb-1">简介</label>
+                  <textarea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                  />
                 </div>
-              </div>
-
-              <div className="flex items-center gap-6">
-                <div className="text-center">
-                  <div className="text-white font-medium">-</div>
-                  <div className="text-aurora-muted text-xs">订单数</div>
+                <div>
+                  <label className="block text-sm text-aurora-muted mb-1">状态</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+                  >
+                    <option value="active">活跃</option>
+                    <option value="inactive">停用</option>
+                    <option value="pending">待审核</option>
+                  </select>
                 </div>
-                <div className="text-center">
-                  <div className="text-green-400 font-medium">¥{planner.service_price || 0}</div>
-                  <div className="text-aurora-muted text-xs">服务价格</div>
-                </div>
-
                 <div className="flex items-center gap-2">
-                  <button className="px-4 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30">
-                    设置
+                  <button
+                    onClick={() => handleSaveEdit(planner.id)}
+                    disabled={saving}
+                    className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-50"
+                  >
+                    {saving ? '保存中...' : '保存'}
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-4 py-2 rounded-lg bg-aurora-card text-aurora-muted hover:text-white"
+                  >
+                    取消
                   </button>
                 </div>
               </div>
-            </div>
+            ) : (
+              // 查看模式
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-aurora-gold/20 flex items-center justify-center">
+                    <Crown className="w-7 h-7 text-aurora-gold" />
+                  </div>
+                  <div>
+                    <div className="text-white font-medium text-lg">{planner.name}</div>
+                    <div className="text-aurora-muted text-sm">{planner.company_name || '个人工作室'} · {planner.city || '未知'}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <div className="text-white font-medium">-</div>
+                    <div className="text-aurora-muted text-xs">订单数</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-green-400 font-medium">¥{planner.service_price || 0}</div>
+                    <div className="text-aurora-muted text-xs">服务价格</div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleStartEdit(planner)}
+                      className="px-4 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+                    >
+                      编辑
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {planners.length === 0 && (
