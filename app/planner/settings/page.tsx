@@ -120,8 +120,8 @@ export default function PlannerSettingsPage() {
             .eq('planner_id', authUser.id)
 
           if (styleTags) {
-            const styles = styleTags.filter(t => t.tag_category === 'style').map(t => t.tag_name)
-            const colors = styleTags.filter(t => t.tag_category === 'color').map(t => t.tag_name)
+            const styles = styleTags.filter((t: { tag_category: string }) => t.tag_category === 'style').map((t: { tag_name: string }) => t.tag_name)
+            const colors = styleTags.filter((t: { tag_category: string }) => t.tag_category === 'color').map((t: { tag_name: string }) => t.tag_name)
             setProfileForm(prev => ({ ...prev, style_tags: styles, color_tags: colors }))
           }
         }
