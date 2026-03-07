@@ -747,6 +747,7 @@ export default function PlannerSettingsPage() {
         <PortfolioModal
           userId={user?.id || ''}
           editingItem={editingItem}
+          styleTags={configurableTags.style}
           onClose={() => {
             setShowAddModal(false)
             setEditingItem(null)
@@ -776,11 +777,13 @@ export default function PlannerSettingsPage() {
 function PortfolioModal({
   userId,
   editingItem,
+  styleTags,
   onClose,
   onSuccess
 }: {
   userId: string
   editingItem: any
+  styleTags: string[]
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -981,7 +984,7 @@ function PortfolioModal({
           <div>
             <label className="block text-sm text-aurora-muted mb-2">风格标签</label>
             <div className="flex flex-wrap gap-2">
-              {configurableTags.style.map(tag => (
+              {styleTags.map(tag => (
                 <button
                   key={tag}
                   type="button"
