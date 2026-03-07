@@ -783,11 +783,6 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncSt
     }
   }
 
-  // ========== 修复4: 补全查看详情处理函数 ==========
-  const handleViewUser = (user: any) => {
-    alert(`用户详情:\n姓名: ${user.name}\n邮箱: ${user.email}\n城市: ${user.city || '未知'}\n注册时间: ${new Date(user.created_at).toLocaleDateString()}`)
-  }
-
   // ========== 修复5: 补全编辑处理函数 ==========
   const handleEditUser = (user: any) => {
     const newName = prompt('请输入新姓名:', user.name)
