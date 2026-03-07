@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic'
+
 /**
  * 获取可配置标签（公开接口）
  * GET /api/tags?types=personal,color,venue,season,style
