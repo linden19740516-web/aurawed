@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 /**
  * 删除用户资料
  * DELETE /api/admin/users
+ * 同时删除 user_profiles 表和 auth.users 表中的记录
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -14,20 +15,38 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '缺少用户ID' }, { status: 400 })
     }
 
-    // 注意：在Supabase中，如果是要彻底删除用户，其实需要删除 auth.users 里的记录（这需要 service_role 权限）。
-    // 这里我们先只删除 user_profiles 表的资料，由于设置了 ON DELETE CASCADE，或者如果是反向的话，
-    // 我们可能需要调用专门的 Admin API。
-    // 为了简单实现"软删除"或"禁用"的效果，我们给它打一个删除标记或者先尝试物理删除 user_profiles。
+    const supabaseAdmin = getSupabaseAdmin()
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: '服务器配置错误' }, { status: 500 })
+    }
 
-    // 这里执行物理删除 profile：
-    const { error } = await supabase
+    // 1. 先删除 user_profiles 表中的记录
+    const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (profileError) {
+      console.error('删除 user_profiles 失败:', profileError)
+      // 继续尝试删除 auth.users
+    }
 
-    return NextResponse.json({ success: true, message: '用户已删除' })
+    // 2. 删除 auth.users 表中的记录
+    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id)
+
+    if (authError) {
+      console.error('删除 auth.users 失败:', authError)
+      // 如果 profile 已删除但 auth 失败，返回部分成功
+      if (!profileError) {
+        return NextResponse.json({
+          success: true,
+          message: '用户资料已删除，但认证账户删除失败'
+        })
+      }
+      throw authError
+    }
+
+    return NextResponse.json({ success: true, message: '用户已完全删除' })
   } catch (error: any) {
     console.error('删除用户失败:', error)
     return NextResponse.json(

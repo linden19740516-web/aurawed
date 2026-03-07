@@ -6,7 +6,7 @@ import {
   Crown, Users, FileText, CreditCard, MessageSquare, BarChart3, Settings,
   Search, Plus, MoreVertical, Check, X, Eye, Edit, Trash2, Send,
   ChevronLeft, LogOut, Shield, AlertCircle, CheckCircle, Clock,
-  DollarSign, Sparkles, Bell, RefreshCw, Loader2
+  DollarSign, Sparkles, Bell, RefreshCw, Loader2, Key, Save, EyeOff, Copy, CheckCircle2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -42,6 +42,10 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([])
   const [planners, setPlanners] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
+  const [apiConfigs, setApiConfigs] = useState<any[]>([])
+  const [apiConfigsLoading, setApiConfigsLoading] = useState(false)
+  const [editingConfig, setEditingConfig] = useState<string | null>(null)
+  const [savingConfig, setSavingConfig] = useState<string | null>(null)
 
   // ========== 修复: 登录状态守卫 - 防止重定向循环 ==========
   useEffect(() => {
@@ -65,14 +69,56 @@ export default function AdminPage() {
     checkAuth()
   }, [])
 
+  // ========== 获取 API 配置数据 ==========
+  const fetchApiConfigs = async () => {
+    setApiConfigsLoading(true)
+    try {
+      const response = await fetch('/api/admin/api-config')
+      const result = await response.json()
+      if (result.success) {
+        setApiConfigs(result.data)
+      }
+    } catch (error) {
+      console.error('获取 API 配置失败:', error)
+    } finally {
+      setApiConfigsLoading(false)
+    }
+  }
+
+  // ========== 保存 API 配置 ==========
+  const saveApiConfig = async (config: any) => {
+    setSavingConfig(config.id)
+    try {
+      const response = await fetch('/api/admin/api-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      })
+      const result = await response.json()
+      if (result.success) {
+        await fetchApiConfigs()
+        setEditingConfig(null)
+        alert(`${config.platform_name} 配置已更新`)
+      } else {
+        alert('更新失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('保存 API 配置失败:', error)
+      alert('保存失败')
+    } finally {
+      setSavingConfig(null)
+    }
+  }
+
   // ========== 修复2: 从后端 API 获取真实数据 ==========
   const fetchData = async () => {
     setLoading(true)
     try {
       const response = await fetch('/api/admin/dashboard')
+      // 移除自动跳转逻辑，删除操作后不应影响当前页面状态
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('aurawed_user_type')
-        window.location.href = '/'
+        console.warn('认证过期，但保留当前页面状态')
+        setLoading(false)
         return
       }
       if (!response.ok) throw new Error('获取数据失败')
@@ -85,7 +131,7 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error('获取数据失败:', error)
-      alert('获取数据失败，请检查网络连接')
+      // 不再弹窗打扰用户，也不跳转页面
     } finally {
       setLoading(false)
     }
@@ -96,6 +142,13 @@ export default function AdminPage() {
       fetchData()
     }
   }, [isAuthorized])
+
+  // 当切换到设置页面时，获取 API 配置
+  useEffect(() => {
+    if (activeMenu === 'settings' && isAuthorized) {
+      fetchApiConfigs()
+    }
+  }, [activeMenu, isAuthorized])
 
   // 修复: 等待授权检查完成
   if (isAuthorized === null) {
@@ -124,7 +177,17 @@ export default function AdminPage() {
       case 'support':
         return <div className="text-center py-20"><MessageSquare className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">客服/公告</h3><p className="text-aurora-muted">公告管理功能...</p></div>
       case 'settings':
-        return <div className="text-center py-20"><Settings className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">系统设置</h3><p className="text-aurora-muted">网站基本设置...</p></div>
+        return (
+          <ApiSettingsContent
+            configs={apiConfigs}
+            loading={apiConfigsLoading}
+            editing={editingConfig}
+            saving={savingConfig}
+            onEdit={setEditingConfig}
+            onSave={saveApiConfig}
+            onRefresh={fetchApiConfigs}
+          />
+        )
       default:
         return null
     }
@@ -481,13 +544,14 @@ function OrdersContent({ orders, planners, loading, deleting, onRefresh, setDele
 
     setAssigning(true)
     try {
-      const { error } = await supabase
-        .from('weddings')
-        .update({
-          planner_id: plannerId,
-          status: 'in_progress',
-          planner_status: 'matched'
-        })
+      const updateData = {
+        planner_id: plannerId,
+        status: 'in_progress',
+        planner_status: 'matched'
+      }
+      const { error } = await (supabase
+        .from('weddings') as any)
+        .update(updateData)
         .eq('id', orderId)
 
       if (error) throw error
@@ -648,6 +712,248 @@ function OrdersContent({ orders, planners, loading, deleting, onRefresh, setDele
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// ========== 组件: API 设置 ==========
+function ApiSettingsContent({
+  configs,
+  loading,
+  editing,
+  saving,
+  onEdit,
+  onSave,
+  onRefresh
+}: {
+  configs: any[],
+  loading: boolean,
+  editing: string | null,
+  saving: string | null,
+  onEdit: (id: string | null) => void,
+  onSave: (config: any) => void,
+  onRefresh: () => void
+}) {
+  const [showKey, setShowKey] = useState<{ [key: string]: boolean }>({})
+  const [localConfigs, setLocalConfigs] = useState<{ [key: string]: string }>({})
+
+  // 平台名称映射
+  const platformNames: { [key: string]: string } = {
+    gemini: 'Google Gemini',
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    feishu: '飞书 Webhook'
+  }
+
+  // 平台图标/颜色
+  const platformStyles: { [key: string]: { bg: string, text: string } } = {
+    gemini: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
+    openai: { bg: 'bg-green-500/20', text: 'text-green-400' },
+    anthropic: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+    feishu: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' }
+  }
+
+  const handleEdit = (config: any) => {
+    setLocalConfigs((prev) => ({ ...prev, [config.id]: config.api_key || '' }))
+    onEdit(config.id)
+  }
+
+  const handleCancel = () => {
+    setLocalConfigs({})
+    onEdit(null)
+  }
+
+  const handleSave = (config: any) => {
+    onSave({
+      id: config.id,
+      platform_name: config.platform_name,
+      api_key: localConfigs[config.id] || ''
+    })
+  }
+
+  const toggleShowKey = (id: string) => {
+    setShowKey((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-3xl text-white">系统设置</h1>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span>刷新</span>
+        </button>
+      </div>
+
+      {/* API 配置列表 */}
+      <div className="space-y-4">
+        {configs.map((config) => (
+          <motion.div
+            key={config.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 rounded-xl card-luxury border border-aurora-border"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl ${platformStyles[config.platform_name]?.bg || 'bg-purple-500/20'} flex items-center justify-center`}>
+                  <Key className={`w-6 h-6 ${platformStyles[config.platform_name]?.text || 'text-purple-400'}`} />
+                </div>
+                <div>
+                  <h3 className="text-white font-medium text-lg">
+                    {platformNames[config.platform_name] || config.platform_name}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {config.api_key_set ? (
+                      <span className="flex items-center gap-1 text-xs text-green-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        已配置
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-aurora-muted">
+                        <AlertCircle className="w-3 h-3" />
+                        未配置
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {editing === config.id ? (
+                  <>
+                    <button
+                      onClick={() => handleSave(config)}
+                      disabled={saving === config.id}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-50"
+                    >
+                      {saving === config.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>保存</span>
+                    </button>
+                    <button
+                      onClick={handleCancel}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-aurora-card text-aurora-muted hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>取消</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => handleEdit(config)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+                  >
+                    <Edit className="w-4 h-4" />
+                    <span>配置</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* API Key 输入区域 */}
+            <div className="mt-4">
+              {editing === config.id ? (
+                <div className="relative">
+                  <input
+                    type={showKey[config.id] ? 'text' : 'password'}
+                    value={localConfigs[config.id] || ''}
+                    onChange={(e) => setLocalConfigs((prev) => ({ ...prev, [config.id]: e.target.value }))}
+                    placeholder="请输入 API Key"
+                    className="w-full px-4 py-3 pr-24 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleShowKey(config.id)}
+                      className="p-2 text-aurora-muted hover:text-white"
+                    >
+                      {showKey[config.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-aurora-muted">
+                  <span className="font-mono bg-aurora-card px-2 py-1 rounded">
+                    {config.api_key_set ? (showKey[config.id] ? '••••••••••••••••' : '••••••••••••••••') : '未设置'}
+                  </span>
+                  {config.api_key_set && (
+                    <button
+                      onClick={() => toggleShowKey(config.id)}
+                      className="p-1 hover:text-white"
+                    >
+                      {showKey[config.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* 首次展示开关 */}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-aurora-muted">在首页首次展示此平台</span>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/admin/api-config', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          id: config.id,
+                          is_first_view: !config.is_first_view
+                        })
+                      })
+                      onRefresh()
+                    } catch (e) {
+                      console.error(e)
+                    }
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    config.is_first_view ? 'bg-purple-500' : 'bg-aurora-card'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                      config.is_first_view ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+
+        {configs.length === 0 && !loading && (
+          <div className="text-center py-20 text-aurora-muted">
+            暂无 API 配置
+          </div>
+        )}
+
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+          </div>
+        )}
+      </div>
+
+      {/* 说明 */}
+      <div className="mt-8 p-4 rounded-xl bg-aurora-card/50 border border-aurora-border">
+        <h4 className="text-white font-medium mb-2">配置说明</h4>
+        <ul className="space-y-1 text-sm text-aurora-muted">
+          <li>• <strong className="text-aurora-gold">Google Gemini</strong>: 用于AI生成婚礼方案和图片（推荐）</li>
+          <li>• <strong className="text-aurora-gold">OpenAI</strong>: 可选的文字生成API</li>
+          <li>• <strong className="text-aurora-gold">Anthropic</strong>: 可选的Claude模型API</li>
+          <li>• <strong className="text-aurora-gold">飞书 Webhook</strong>: 接收订单通知（可选）</li>
+        </ul>
       </div>
     </div>
   )
