@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone } from 'lucide-react'
+import { Heart, Sparkles, ArrowRight, Users, Crown, X, Mail, Lock, User, MapPin, Settings, Phone, Image } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 // 用户类型
@@ -168,11 +168,11 @@ export default function Home() {
 
       // 获取用户资料
       if (authData.user) {
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile, error: profileError } = await (supabase
           .from('user_profiles')
           .select('user_type, name, city')
           .eq('id', authData.user.id)
-          .single()
+          .single() as any)
 
         if (profileError) throw profileError
 
@@ -348,6 +348,24 @@ export default function Home() {
 
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-aurora-gold to-aurora-gold-light transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500" />
           </motion.button>
+        </motion.div>
+
+        {/* 作品集入口 */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="mt-16"
+        >
+          <button
+            onClick={() => window.location.href = '/portfolio'}
+            className="group relative px-8 py-4 rounded-2xl card-luxury inline-flex items-center gap-3 hover:border-aurora-gold/30 transition-all"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-aurora-gold/5 to-aurora-rose/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl" />
+            <Image className="w-6 h-6 text-aurora-gold" />
+            <span className="text-white font-medium">浏览优秀作品</span>
+            <ArrowRight className="w-4 h-4 text-aurora-gold group-hover:translate-x-1 transition-transform" />
+          </button>
         </motion.div>
 
         <motion.div
@@ -587,7 +605,19 @@ export default function Home() {
                 </button>
               </form>
 
-              <p className="mt-6 text-center text-aurora-muted text-sm">
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => {
+                    setShowLogin(false)
+                    window.location.href = '/forgot-password'
+                  }}
+                  className="text-aurora-gold text-sm hover:underline"
+                >
+                  忘记密码？
+                </button>
+              </div>
+
+              <p className="mt-4 text-center text-aurora-muted text-sm">
                 还没有账号？{' '}
                 <button
                   onClick={() => {

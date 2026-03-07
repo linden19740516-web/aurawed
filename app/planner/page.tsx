@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Crown, Plus, Search, Users, FileText, Settings,
   Sparkles, Image, Download, Copy, RefreshCw, Trash2,
-  ChevronRight, MoreVertical, LogOut, Loader2
+  ChevronRight, MoreVertical, LogOut, Loader2, Image
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -227,15 +227,26 @@ export default function PlannerPage() {
               <Copy className="w-5 h-5" />
               <span className="font-medium">方案模板</span>
             </button>
+
+            <a
+              href="/planner/portfolio"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-aurora-muted hover:bg-aurora-card hover:text-white"
+            >
+              <Image className="w-5 h-5" />
+              <span className="font-medium">作品集</span>
+            </a>
           </div>
         </nav>
 
         {/* 底部 */}
         <div className="p-4 border-t border-aurora-border">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all">
+          <a
+            href="/planner/settings"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all"
+          >
             <Settings className="w-5 h-5" />
             <span className="font-medium">设置</span>
-          </button>
+          </a>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all"

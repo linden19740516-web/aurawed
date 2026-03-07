@@ -30,7 +30,7 @@ async function confirmUserEmail() {
   console.log('Found user:', plannerUser.email, 'ID:', plannerUser.id)
 
   // 确认邮箱
-  const { error: confirmError } = await supabaseAdmin.auth.admin.updateUser(
+  const { error: confirmError } = await (supabaseAdmin.auth.admin as any).updateUser(
     plannerUser.id,
     { email_confirm: true }
   )

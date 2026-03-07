@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 创建婚礼项目
-    const { data: wedding, error: weddingError } = await supabase
-      .from('weddings')
+    const { data: wedding, error: weddingError } = await (supabase
+      .from('weddings') as any)
       .insert({
         couple_id: user.id,
         name,
@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
 
         if (matchResult.success && matchResult.planners?.length > 0) {
           // 更新婚礼状态为已匹配
-          await supabase
-            .from('weddings')
+          await (supabase
+            .from('weddings') as any)
             .update({
               planner_status: 'matched'
             })

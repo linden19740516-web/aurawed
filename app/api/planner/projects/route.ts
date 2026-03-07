@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .from('user_profiles')
       .select('user_type')
       .eq('id', user.id)
-      .single()
+      .single() as any
 
     if (!profile || profile.user_type !== 'planner') {
       return NextResponse.json({ error: '无权限访问' }, { status: 403 })

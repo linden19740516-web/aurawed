@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Heart, Sparkles, ArrowRight, FileText, MessageCircle, X, LogOut, Settings } from 'lucide-react'
+import { Heart, Sparkles, ArrowRight, FileText, MessageCircle, X, LogOut, Settings, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function CouplePage() {
@@ -52,6 +52,13 @@ export default function CouplePage() {
           </div>
         )}
         <div className="flex items-center gap-3">
+          <a
+            href="/couple/settings"
+            className="flex items-center gap-2 px-4 py-2 text-aurora-muted hover:text-white transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+            <span>设置</span>
+          </a>
           <button
             onClick={handleLogout}
             className="flex items-center gap-2 px-4 py-2 text-aurora-muted hover:text-white transition-colors"

@@ -204,6 +204,32 @@ CREATE INDEX idx_planner_service_areas_planner ON planner_service_areas(planner_
 CREATE INDEX idx_planner_service_areas_city ON planner_service_areas(city);
 
 -- ============================================
+-- 12. 策划师作品集表
+-- ============================================
+CREATE TABLE IF NOT EXISTS planner_portfolios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    planner_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    cover_image TEXT,
+    images TEXT[],  -- 作品图片数组
+    wedding_style TEXT,  -- 婚礼风格标签
+    city TEXT,  -- 举办城市
+    venue_type TEXT,  -- 场地类型
+    budget_range TEXT,  -- 预算范围
+    guest_count INTEGER,  -- 宾客人数
+    is_public BOOLEAN DEFAULT TRUE,  -- 是否公开
+    likes_count INTEGER DEFAULT 0,  -- 点赞数
+    views_count INTEGER DEFAULT 0,  -- 浏览数
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_planner_portfolios_planner ON planner_portfolios(planner_id);
+CREATE INDEX idx_planner_portfolios_public ON planner_portfolios(planner_id, is_public);
+CREATE INDEX idx_planner_portfolios_city ON planner_portfolios(city);
+
+-- ============================================
 -- RLS 策略 (Row Level Security)
 -- ============================================
 
@@ -317,6 +343,21 @@ CREATE POLICY "Related users can view media"
     );
 
 -- ============================================
+-- 作品集权限
+-- ============================================
+ALTER TABLE planner_portfolios ENABLE ROW LEVEL SECURITY;
+
+-- 公开的作品集所有人都可以查看
+CREATE POLICY "Public portfolios are viewable by everyone"
+    ON planner_portfolios FOR SELECT
+    USING (is_public = true);
+
+-- 策划师可以管理自己的作品集
+CREATE POLICY "Planners can manage own portfolios"
+    ON planner_portfolios FOR ALL
+    USING (auth.uid() = planner_id);
+
+-- ============================================
 -- 存储桶设置 (用于媒体文件)
 -- ============================================
 INSERT INTO storage.buckets (id, name, public)
@@ -334,6 +375,113 @@ CREATE POLICY "Authenticated users can upload"
 CREATE POLICY "Owners can delete own media"
     ON storage.objects FOR DELETE
     USING (bucket_id = 'wedding-media' AND auth.role() = 'authenticated');
+
+-- ============================================
+-- 13. 用户个人设置表（情侣用户）
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    -- 预算偏好
+    budget_min DECIMAL(12, 2),
+    budget_max DECIMAL(12, 2),
+    -- 颜色偏好
+    preferred_colors TEXT[],  -- 喜欢的颜色数组
+    -- 个人标签
+    personal_tags TEXT[],  -- 个人标签数组
+    -- 婚礼相关偏好
+    preferred_season TEXT[],  -- 喜欢的季节
+    preferred_venue_type TEXT[],  -- 喜欢的场地类型
+    guest_count_min INTEGER,
+    guest_count_max INTEGER,
+    -- 其他
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+CREATE INDEX idx_user_settings_user ON user_settings(user_id);
+
+-- ============================================
+-- 14. 策划师风格标签表
+-- ============================================
+CREATE TABLE IF NOT EXISTS planner_style_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    planner_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    tag_name TEXT NOT NULL,
+    tag_category TEXT,  -- 'style', 'color', 'mood', 'element'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(planner_id, tag_name)
+);
+
+CREATE INDEX idx_planner_style_tags_planner ON planner_style_tags(planner_id);
+
+-- ============================================
+-- 15. 策划师作品集详细项目表（支持多图片）
+-- ============================================
+CREATE TABLE IF NOT EXISTS planner_portfolio_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    planner_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    wedding_date DATE,
+    city TEXT,
+    venue_name TEXT,
+    venue_type TEXT,
+    budget_range TEXT,
+    guest_count INTEGER,
+    style_tags TEXT[],  -- 风格标签
+    cover_image TEXT,
+    images JSONB,  -- 多张图片数组，包含URL和元数据
+    is_public BOOLEAN DEFAULT TRUE,
+    likes_count INTEGER DEFAULT 0,
+    views_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_planner_portfolio_items_planner ON planner_portfolio_items(planner_id);
+CREATE INDEX idx_planner_portfolio_items_public ON planner_portfolio_items(planner_id, is_public);
+
+-- ============================================
+-- RLS 策略 - 用户设置
+-- ============================================
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own settings"
+    ON user_settings FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own settings"
+    ON user_settings FOR ALL
+    USING (auth.uid() = user_id);
+
+-- ============================================
+-- RLS 策略 - 策划师风格标签
+-- ============================================
+ALTER TABLE planner_style_tags ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view planner style tags"
+    ON planner_style_tags FOR SELECT
+    USING (true);
+
+CREATE POLICY "Planners can manage own style tags"
+    ON planner_style_tags FOR ALL
+    USING (auth.uid() = planner_id);
+
+-- ============================================
+-- RLS 策略 - 策划师作品集项目
+-- ============================================
+ALTER TABLE planner_portfolio_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public portfolio items are viewable by everyone"
+    ON planner_portfolio_items FOR SELECT
+    USING (is_public = true);
+
+CREATE POLICY "Planners can manage own portfolio items"
+    ON planner_portfolio_items FOR ALL
+    USING (auth.uid() = planner_id);
 
 -- ============================================
 -- 更新触发器 (updated_at 自动更新)
@@ -364,6 +512,14 @@ CREATE TRIGGER update_wedding_plans_updated_at
 
 CREATE TRIGGER update_scheduled_tasks_updated_at
     BEFORE UPDATE ON scheduled_tasks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_settings_updated_at
+    BEFORE UPDATE ON user_settings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_planner_portfolio_items_updated_at
+    BEFORE UPDATE ON planner_portfolio_items
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================

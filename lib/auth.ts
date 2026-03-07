@@ -16,11 +16,11 @@ export async function signUp(
         return { success: false, error: '策划师入驻需要邀请码' }
       }
 
-      const { data: codeData, error: codeError } = await supabase
+      const { data: codeData, error: codeError } = await (supabase
         .from('invite_codes')
         .select('*')
         .eq('code', inviteCode)
-        .single()
+        .single() as any)
 
       if (codeError || !codeData) {
         return { success: false, error: '邀请码无效' }
@@ -199,4 +199,93 @@ export async function generateInviteCode(): Promise<string> {
   if (error) throw error
 
   return code
+}
+
+// 发送密码重置邮件
+export async function forgotPassword(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+    })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('发送密码重置邮件错误:', error)
+    return { success: false, error: '发送失败，请重试' }
+  }
+}
+
+// 重置密码（通过邮箱链接）
+export async function resetPassword(
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    if (!user) {
+      return { success: false, error: '用户未登录，请通过邮箱链接重置密码' }
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('重置密码错误:', error)
+    return { success: false, error: '重置密码失败，请重试' }
+  }
+}
+
+// 更新用户密码（需要当前密码验证）
+export async function updatePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. 先验证当前密码
+    const { data: { user }, error: getUserError } = await supabase.auth.getUser()
+
+    if (getUserError || !user) {
+      return { success: false, error: '获取用户信息失败' }
+    }
+
+    // 2. 尝试使用当前密码登录验证
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email || '',
+      password: currentPassword,
+    })
+
+    if (signInError) {
+      return { success: false, error: '当前密码不正确' }
+    }
+
+    // 3. 更新为新密码
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('更新密码错误:', error)
+    return { success: false, error: '更新密码失败，请重试' }
+  }
 }
