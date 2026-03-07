@@ -21,18 +21,20 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json()
 
-    // 更新 user_profiles 表
+    // 更新 user_profiles 表（只更新存在的字段）
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    }
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.city !== undefined) updateData.city = body.city
+    if (body.company_name !== undefined) updateData.company_name = body.company_name
+    if (body.bio !== undefined) updateData.bio = body.bio
+    if (body.service_price !== undefined) updateData.service_price = body.service_price
+    // 注意：user_profiles 表没有 status 字段，不更新
+
     const { data, error } = await supabaseAdmin
       .from('user_profiles')
-      .update({
-        name: body.name,
-        city: body.city,
-        company_name: body.company_name,
-        bio: body.bio,
-        service_price: body.service_price,
-        status: body.status,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single()

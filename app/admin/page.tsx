@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Crown, Users, FileText, CreditCard, MessageSquare, BarChart3, Settings,
@@ -28,6 +29,7 @@ const ADMIN_MENU = [
 // 数据全部从 Supabase 真实获取，不再使用模拟数据
 
 export default function AdminPage() {
+  const router = useRouter()
   const [activeMenu, setActiveMenu] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -64,6 +66,12 @@ export default function AdminPage() {
   // 用户同步状态
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncStats, setSyncStats] = useState<{ total_auth: number; total_profiles: number; missing_profiles: number } | null>(null)
+
+  // 公告状态
+  const [announcements, setAnnouncements] = useState<any[]>([])
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false)
+  const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null)
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false)
 
   // ========== 修复: 登录状态守卫 - 防止重定向循环 ==========
   useEffect(() => {
@@ -252,6 +260,94 @@ export default function AdminPage() {
     }
   }
 
+  // ========== 获取公告列表 ==========
+  const fetchAnnouncements = async () => {
+    setAnnouncementsLoading(true)
+    try {
+      const response = await fetch('/api/admin/announcements')
+      const result = await response.json()
+      if (result.success) {
+        setAnnouncements(result.data || [])
+      }
+    } catch (error) {
+      console.error('获取公告列表失败:', error)
+    } finally {
+      setAnnouncementsLoading(false)
+    }
+  }
+
+  // ========== 保存公告 ==========
+  const saveAnnouncement = async (announcement: any) => {
+    setSavingAnnouncement(true)
+    try {
+      let response
+      if (announcement.id) {
+        response = await fetch(`/api/admin/announcements?id=${announcement.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(announcement)
+        })
+      } else {
+        response = await fetch('/api/admin/announcements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(announcement)
+        })
+      }
+      const result = await response.json()
+      if (result.success) {
+        await fetchAnnouncements()
+        setEditingAnnouncement(null)
+        alert(announcement.id ? '公告已更新' : '公告已发布')
+      } else {
+        alert('保存失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('保存公告失败:', error)
+      alert('保存失败')
+    } finally {
+      setSavingAnnouncement(false)
+    }
+  }
+
+  // ========== 删除公告 ==========
+  const deleteAnnouncement = async (id: string) => {
+    if (!confirm('确定要删除这条公告吗？')) return
+
+    try {
+      const response = await fetch(`/api/admin/announcements?id=${id}`, {
+        method: 'DELETE'
+      })
+      const result = await response.json()
+      if (result.success) {
+        await fetchAnnouncements()
+        alert('公告已删除')
+      } else {
+        alert('删除失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('删除公告失败:', error)
+      alert('删除失败')
+    }
+  }
+
+  // ========== 清除缓存 ==========
+  const clearCache = async () => {
+    try {
+      const response = await fetch('/api/admin/clear-cache', { method: 'POST' })
+      const result = await response.json()
+      if (result.success) {
+        alert('缓存已清除')
+        fetchData()
+      } else {
+        alert('清除缓存失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('清除缓存失败:', error)
+      alert('清除缓存失败')
+    }
+  }
+
   // ========== 保存 API 配置 ==========
   const saveApiConfig = async (config: any) => {
     setSavingConfig(config.id)
@@ -371,6 +467,13 @@ export default function AdminPage() {
     }
   }, [activeMenu, isAuthorized])
 
+  // 当切换到客服/公告页面时，获取公告列表
+  useEffect(() => {
+    if (activeMenu === 'support' && isAuthorized) {
+      fetchAnnouncements()
+    }
+  }, [activeMenu, isAuthorized])
+
   // 修复: 等待授权检查完成
   if (isAuthorized === null) {
     return (
@@ -386,7 +489,7 @@ export default function AdminPage() {
       case 'dashboard':
         return <DashboardContent stats={stats} orders={orders} loading={loading} onRefresh={fetchData} />
       case 'users':
-        return <UsersContent users={users} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} syncStats={syncStats} onSync={syncUsers} />
+        return <UsersContent users={users} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} syncStats={syncStats} onSync={syncUsers} onClearCache={clearCache} />
       case 'planners':
         return <PlannersContent planners={planners} onRefresh={fetchData} />
       case 'orders':
@@ -396,7 +499,18 @@ export default function AdminPage() {
       case 'payments':
         return <div className="text-center py-20"><CreditCard className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">支付流水</h3><p className="text-aurora-muted">支付订单管理...</p></div>
       case 'support':
-        return <div className="text-center py-20"><MessageSquare className="w-16 h-16 text-aurora-muted mx-auto mb-4" /><h3 className="text-white text-xl">客服/公告</h3><p className="text-aurora-muted">公告管理功能...</p></div>
+        return (
+          <AnnouncementsContent
+            announcements={announcements}
+            loading={announcementsLoading}
+            editing={editingAnnouncement}
+            saving={savingAnnouncement}
+            onEdit={setEditingAnnouncement}
+            onSave={saveAnnouncement}
+            onDelete={deleteAnnouncement}
+            onRefresh={fetchAnnouncements}
+          />
+        )
       case 'site_settings':
         return (
           <SiteSettingsContent
@@ -481,7 +595,7 @@ export default function AdminPage() {
         {/* 底部 */}
         <div className="p-4 border-t border-aurora-border">
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={() => router.push('/')}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-aurora-muted hover:bg-aurora-card hover:text-white transition-all"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -605,9 +719,46 @@ function DashboardContent({ stats, orders, loading, onRefresh }: { stats: any, o
 }
 
 // ========== 组件: 用户管理 (修复: 完整删除功能) ==========
-function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncStats, onSync }: {
-  users: any[], loading: boolean, deleting: string | null, onRefresh: () => void, setDeleting: (id: string | null) => void, syncStats?: { total_auth: number; total_profiles: number; missing_profiles: number } | null, onSync?: () => void
+function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncStats, onSync, onClearCache }: {
+  users: any[], loading: boolean, deleting: string | null, onRefresh: () => void, setDeleting: (id: string | null) => void, syncStats?: { total_auth: number; total_profiles: number; missing_profiles: number } | null, onSync?: () => void, onClearCache?: () => void
 }) {
+  const [viewingUser, setViewingUser] = useState<any>(null)
+  const [userDetails, setUserDetails] = useState<any>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+
+  // 加载用户真实信息
+  const loadUserDetails = async (userId: string) => {
+    setLoadingDetails(true)
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/details`)
+      const result = await response.json()
+      if (result.success) {
+        setUserDetails(result.data)
+      } else {
+        alert('加载用户信息失败: ' + result.error)
+      }
+    } catch (error) {
+      console.error('加载用户信息失败:', error)
+      alert('加载用户信息失败')
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
+  // 查看用户详情
+  const handleViewUser = async (user: any) => {
+    setViewingUser(user)
+    setUserDetails(null)
+    // 点击加载真实信息
+    await loadUserDetails(user.id)
+  }
+
+  // 关闭用户详情弹窗
+  const closeUserDetails = () => {
+    setViewingUser(null)
+    setUserDetails(null)
+  }
+
   // ========== 修复3: 补全删除用户处理函数 ==========
   const handleDeleteUser = async (id: string, name: string) => {
     if (!confirm(`确定要删除用户 "${name}" 吗？此操作不可恢复。`)) return
@@ -656,6 +807,16 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncSt
               <AlertCircle className="w-4 h-4" />
               <span>{syncStats.missing_profiles} 个用户未同步</span>
             </div>
+          )}
+          {/* 清除缓存按钮 */}
+          {onClearCache && (
+            <button
+              onClick={onClearCache}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>清除缓存</span>
+            </button>
           )}
           {/* 同步按钮 */}
           <button
@@ -742,6 +903,115 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncSt
           </tbody>
         </table>
       </div>
+
+      {/* 用户详情弹窗 */}
+      {viewingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg p-6 rounded-2xl card-luxury"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl text-white">用户详情</h2>
+              <button
+                onClick={closeUserDetails}
+                className="p-2 text-aurora-muted hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-aurora-card">
+                <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <Users className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <div className="text-white font-medium">{viewingUser.name}</div>
+                  <div className="text-aurora-muted text-sm">{viewingUser.email}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-aurora-card">
+                  <div className="text-aurora-muted text-sm mb-1">城市</div>
+                  <div className="text-white">{viewingUser.city || '未知'}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-aurora-card">
+                  <div className="text-aurora-muted text-sm mb-1">注册时间</div>
+                  <div className="text-white">{new Date(viewingUser.created_at || Date.now()).toLocaleDateString()}</div>
+                </div>
+              </div>
+
+              {/* 真实信息区域 */}
+              <div className="p-4 rounded-xl bg-aurora-card border border-purple-500/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-purple-400 font-medium">真实信息</div>
+                  <button
+                    onClick={() => loadUserDetails(viewingUser.id)}
+                    disabled={loadingDetails}
+                    className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loadingDetails ? 'animate-spin' : ''}`} />
+                    {loadingDetails ? '加载中...' : '刷新'}
+                  </button>
+                </div>
+
+                {loadingDetails ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                  </div>
+                ) : userDetails ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-aurora-muted text-xs">真实姓名</div>
+                        <div className="text-white">{userDetails.real_name || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-aurora-muted text-xs">联系电话</div>
+                        <div className="text-white">{userDetails.phone || '-'}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-aurora-muted text-xs mb-1">需求标签</div>
+                      <div className="flex flex-wrap gap-1">
+                        {userDetails.tags && userDetails.tags.length > 0 ? (
+                          userDetails.tags.map((tag: string, i: number) => (
+                            <span key={i} className="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-400">
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-aurora-muted text-sm">暂无标签</span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-aurora-muted text-xs mb-1">生成的方案</div>
+                      <div className="text-white">{userDetails.generated_plans_count || 0} 个方案</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-aurora-muted">
+                    点击"刷新"加载真实信息
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={closeUserDetails}
+                className="flex-1 py-3 rounded-xl border border-aurora-border text-white hover:bg-aurora-card transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1134,13 +1404,16 @@ function ApiSettingsContent({
   onRefresh: () => void
 }) {
   const [showKey, setShowKey] = useState<{ [key: string]: boolean }>({})
-  const [localConfigs, setLocalConfigs] = useState<{ [key: string]: string }>({})
+  const [localConfigs, setLocalConfigs] = useState<{ [key: string]: any }>({})
+  const [testingConn, setTestingConn] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<{ [key: string]: { success: boolean; message: string } }>({})
 
   // 平台名称映射
   const platformNames: { [key: string]: string } = {
     gemini: 'Google Gemini',
     openai: 'OpenAI',
-    anthropic: 'Anthropic',
+    anthropic: 'Anthropic Claude',
+    minimax: 'MiniMax',
     feishu: '飞书 Webhook'
   }
 
@@ -1149,29 +1422,82 @@ function ApiSettingsContent({
     gemini: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
     openai: { bg: 'bg-green-500/20', text: 'text-green-400' },
     anthropic: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+    minimax: { bg: 'bg-pink-500/20', text: 'text-pink-400' },
     feishu: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' }
   }
 
   const handleEdit = (config: any) => {
-    setLocalConfigs((prev) => ({ ...prev, [config.id]: config.api_key || '' }))
+    setLocalConfigs((prev) => ({
+      ...prev,
+      [config.id]: {
+        api_key: config.api_key || '',
+        api_base_url: config.api_base_url || '',
+        api_format: config.api_format || 'openai',
+        available_models: config.available_models || '',
+        is_active: config.is_active !== false
+      }
+    }))
+    setTestResult((prev) => ({ ...prev, [config.id]: { success: false, message: '' } }))
     onEdit(config.id)
   }
 
   const handleCancel = () => {
     setLocalConfigs({})
+    setTestResult({})
     onEdit(null)
   }
 
   const handleSave = (config: any) => {
+    const localConfig = localConfigs[config.id] || {}
     onSave({
       id: config.id,
       platform_name: config.platform_name,
-      api_key: localConfigs[config.id] || ''
+      api_key: localConfig.api_key || '',
+      api_base_url: localConfig.api_base_url || '',
+      api_format: localConfig.api_format || 'openai',
+      available_models: localConfig.available_models || '',
+      is_active: localConfig.is_active !== false
     })
+  }
+
+  // 测试连接
+  const handleTestConnection = async (config: any) => {
+    const localConfig = localConfigs[config.id] || {}
+    setTestingConn(config.id)
+    setTestResult((prev) => ({ ...prev, [config.id]: { success: false, message: '测试中...' } }))
+
+    try {
+      const response = await fetch('/api/admin/api-config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: localConfig.api_key,
+          api_base_url: localConfig.api_base_url,
+          api_format: localConfig.api_format,
+          platform_name: config.platform_name
+        })
+      })
+      const result = await response.json()
+      setTestResult((prev) => ({ ...prev, [config.id]: result }))
+    } catch (error: any) {
+      setTestResult((prev) => ({ ...prev, [config.id]: { success: false, message: error.message } }))
+    } finally {
+      setTestingConn(null)
+    }
   }
 
   const toggleShowKey = (id: string) => {
     setShowKey((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const updateLocalConfig = (id: string, field: string, value: any) => {
+    setLocalConfigs((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: value
+      }
+    }))
   }
 
   return (
@@ -1204,7 +1530,7 @@ function ApiSettingsContent({
                 </div>
                 <div>
                   <h3 className="text-white font-medium text-lg">
-                    {platformNames[config.platform_name] || config.platform_name}
+                    {platformNames[config.platform_name] || config.display_name || config.platform_name}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
                     {config.api_key_set ? (
@@ -1216,6 +1542,11 @@ function ApiSettingsContent({
                       <span className="flex items-center gap-1 text-xs text-aurora-muted">
                         <AlertCircle className="w-3 h-3" />
                         未配置
+                      </span>
+                    )}
+                    {config.is_active === false && (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400">
+                        已禁用
                       </span>
                     )}
                   </div>
@@ -1257,75 +1588,160 @@ function ApiSettingsContent({
               </div>
             </div>
 
-            {/* API Key 输入区域 */}
-            <div className="mt-4">
+            {/* API 配置区域 */}
+            <div className="mt-4 space-y-4">
               {editing === config.id ? (
-                <div className="relative">
-                  <input
-                    type={showKey[config.id] ? 'text' : 'password'}
-                    value={localConfigs[config.id] || ''}
-                    onChange={(e) => setLocalConfigs((prev) => ({ ...prev, [config.id]: e.target.value }))}
-                    placeholder="请输入 API Key"
-                    className="w-full px-4 py-3 pr-24 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <>
+                  {/* API Key */}
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-2">API Key</label>
+                    <div className="relative">
+                      <input
+                        type={showKey[config.id] ? 'text' : 'password'}
+                        value={localConfigs[config.id]?.api_key || ''}
+                        onChange={(e) => updateLocalConfig(config.id, 'api_key', e.target.value)}
+                        placeholder="请输入 API Key"
+                        className="w-full px-4 py-3 pr-24 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleShowKey(config.id)}
+                          className="p-2 text-aurora-muted hover:text-white"
+                        >
+                          {showKey[config.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* API Base URL */}
+                  <div>
+                    <label className="block text-sm text-aurora-muted mb-2">API Base URL</label>
+                    <input
+                      type="text"
+                      value={localConfigs[config.id]?.api_base_url || ''}
+                      onChange={(e) => updateLocalConfig(config.id, 'api_base_url', e.target.value)}
+                      placeholder={config.platform_name === 'feishu' ? '飞书 Webhook URL' : 'https://api.example.com/v1'}
+                      className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* API 格式 */}
+                  {config.platform_name !== 'feishu' && (
+                    <div>
+                      <label className="block text-sm text-aurora-muted mb-2">API 格式</label>
+                      <select
+                        value={localConfigs[config.id]?.api_format || 'openai'}
+                        onChange={(e) => updateLocalConfig(config.id, 'api_format', e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white"
+                      >
+                        <option value="openai">OpenAI 兼容</option>
+                        <option value="anthropic">Anthropic 兼容</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 可用模型列表 */}
+                  {config.platform_name !== 'feishu' && (
+                    <div>
+                      <label className="block text-sm text-aurora-muted mb-2">可用模型列表（可选，用逗号分隔）</label>
+                      <input
+                        type="text"
+                        value={localConfigs[config.id]?.available_models || ''}
+                        onChange={(e) => updateLocalConfig(config.id, 'available_models', e.target.value)}
+                        placeholder="如: gpt-4, gpt-3.5-turbo"
+                        className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted focus:border-purple-500/50 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {/* 测试连接按钮 */}
+                  <div className="flex items-center gap-4">
                     <button
-                      type="button"
-                      onClick={() => toggleShowKey(config.id)}
-                      className="p-2 text-aurora-muted hover:text-white"
+                      onClick={() => handleTestConnection(config)}
+                      disabled={testingConn === config.id || !localConfigs[config.id]?.api_key}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-aurora-card text-aurora-muted hover:text-white disabled:opacity-50"
                     >
-                      {showKey[config.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      <RefreshCw className={`w-4 h-4 ${testingConn === config.id ? 'animate-spin' : ''}`} />
+                      <span>{testingConn === config.id ? '测试中...' : '测试连接'}</span>
+                    </button>
+                    {testResult[config.id] && (
+                      <span className={`text-sm ${testResult[config.id].success ? 'text-green-400' : 'text-red-400'}`}>
+                        {testResult[config.id].message}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 启用/禁用开关 */}
+                  <div className="flex items-center justify-between pt-2 border-t border-aurora-border">
+                    <span className="text-sm text-aurora-muted">启用此平台</span>
+                    <button
+                      onClick={() => updateLocalConfig(config.id, 'is_active', !localConfigs[config.id]?.is_active)}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        localConfigs[config.id]?.is_active !== false ? 'bg-purple-500' : 'bg-aurora-card'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          localConfigs[config.id]?.is_active !== false ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
                     </button>
                   </div>
-                </div>
+                </>
               ) : (
-                <div className="flex items-center gap-2 text-sm text-aurora-muted">
-                  <span className="font-mono bg-aurora-card px-2 py-1 rounded">
-                    {config.api_key_set ? (showKey[config.id] ? '••••••••••••••••' : '••••••••••••••••') : '未设置'}
-                  </span>
-                  {config.api_key_set && (
-                    <button
-                      onClick={() => toggleShowKey(config.id)}
-                      className="p-1 hover:text-white"
-                    >
-                      {showKey[config.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-              )}
+                <>
+                  {/* 非编辑模式显示 */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-aurora-muted">API Base URL</div>
+                      <div className="text-white font-mono truncate">{config.api_base_url || '-'}</div>
+                    </div>
+                    <div>
+                      <div className="text-aurora-muted">API 格式</div>
+                      <div className="text-white">{config.api_format === 'anthropic' ? 'Anthropic 兼容' : 'OpenAI 兼容'}</div>
+                    </div>
+                    {config.available_models && (
+                      <div className="col-span-2">
+                        <div className="text-aurora-muted">可用模型</div>
+                        <div className="text-white">{config.available_models}</div>
+                      </div>
+                    )}
+                  </div>
 
-              {/* 首次展示开关 */}
-              <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-aurora-muted">在首页首次展示此平台</span>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await fetch('/api/admin/api-config', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          id: config.id,
-                          is_first_view: !config.is_first_view
-                        })
-                      })
-                      onRefresh()
-                    } catch (e) {
-                      console.error(e)
-                    }
-                  }}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    config.is_first_view ? 'bg-purple-500' : 'bg-aurora-card'
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                      config.is_first_view ? 'translate-x-7' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+                  {/* 首次展示开关 */}
+                  <div className="flex items-center justify-between pt-4 border-t border-aurora-border">
+                    <span className="text-sm text-aurora-muted">在首页首次展示此平台</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await fetch('/api/admin/api-config', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              id: config.id,
+                              is_first_view: !config.is_first_view
+                            })
+                          })
+                          onRefresh()
+                        } catch (e) {
+                          console.error(e)
+                        }
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        config.is_first_view ? 'bg-purple-500' : 'bg-aurora-card'
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                          config.is_first_view ? 'translate-x-7' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         ))}
@@ -1348,9 +1764,10 @@ function ApiSettingsContent({
         <h4 className="text-white font-medium mb-2">配置说明</h4>
         <ul className="space-y-1 text-sm text-aurora-muted">
           <li>• <strong className="text-aurora-gold">Google Gemini</strong>: 用于AI生成婚礼方案和图片（推荐）</li>
-          <li>• <strong className="text-aurora-gold">OpenAI</strong>: 可选的文字生成API</li>
-          <li>• <strong className="text-aurora-gold">Anthropic</strong>: 可选的Claude模型API</li>
-          <li>• <strong className="text-aurora-gold">飞书 Webhook</strong>: 接收订单通知（可选）</li>
+          <li>• <strong className="text-aurora-gold">OpenAI</strong>: GPT模型API</li>
+          <li>• <strong className="text-aurora-gold">Anthropic Claude</strong>: Claude模型API</li>
+          <li>• <strong className="text-aurora-gold">MiniMax</strong>: MiniMax API（国内可用）</li>
+          <li>• <strong className="text-aurora-gold">飞书 Webhook</strong>: 接收订单通知</li>
         </ul>
       </div>
     </div>
@@ -1524,6 +1941,264 @@ function SiteSettingsContent({
             </button>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ========== 组件: 公告管理 ==========
+function AnnouncementsContent({
+  announcements,
+  loading,
+  editing,
+  saving,
+  onEdit,
+  onSave,
+  onDelete,
+  onRefresh
+}: {
+  announcements: any[],
+  loading: boolean,
+  editing: any,
+  saving: boolean,
+  onEdit: (announcement: any) => void,
+  onSave: (announcement: any) => void,
+  onDelete: (id: string) => void,
+  onRefresh: () => void
+}) {
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    is_active: true,
+    scheduled_at: ''
+  })
+
+  // 打开添加弹窗
+  const handleOpenAdd = () => {
+    setFormData({
+      title: '',
+      content: '',
+      is_active: true,
+      scheduled_at: ''
+    })
+    onEdit(null)
+  }
+
+  // 打开编辑弹窗
+  const handleOpenEdit = (announcement: any) => {
+    setFormData({
+      title: announcement.title || '',
+      content: announcement.content || '',
+      is_active: announcement.is_active !== false,
+      scheduled_at: announcement.scheduled_at ? announcement.scheduled_at.slice(0, 16) : ''
+    })
+    onEdit(announcement)
+  }
+
+  // 保存公告
+  const handleSave = () => {
+    if (!formData.title.trim() || !formData.content.trim()) {
+      alert('请填写标题和内容')
+      return
+    }
+    onSave({
+      id: editing?.id,
+      ...formData,
+      scheduled_at: formData.scheduled_at ? new Date(formData.scheduled_at).toISOString() : null
+    })
+  }
+
+  // 切换公告状态
+  const toggleStatus = async (announcement: any) => {
+    try {
+      await fetch(`/api/admin/announcements?id=${announcement.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !announcement.is_active })
+      })
+      onRefresh()
+    } catch (error) {
+      console.error('更新公告状态失败:', error)
+    }
+  }
+
+  // 北京时间格式化
+  const formatBeijingTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+  }
+
+  // 判断是否显示弹窗
+  const showModal = editing !== undefined
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-3xl text-white">公告管理</h1>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>刷新</span>
+          </button>
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            发布公告
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        </div>
+      ) : announcements.length > 0 ? (
+        <div className="space-y-4">
+          {announcements.map((announcement) => (
+            <div
+              key={announcement.id}
+              className={`p-6 rounded-xl card-luxury border ${
+                announcement.is_active ? 'border-aurora-border' : 'border-aurora-border opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-white font-medium text-lg">{announcement.title}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      announcement.is_active
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-aurora-muted/20 text-aurora-muted'
+                    }`}>
+                      {announcement.is_active ? '已发布' : '已隐藏'}
+                    </span>
+                  </div>
+                  <p className="text-aurora-muted mb-3">{announcement.content}</p>
+                  <div className="flex items-center gap-4 text-sm text-aurora-muted">
+                    <span>创建时间: {formatBeijingTime(announcement.created_at)}</span>
+                    {announcement.scheduled_at && (
+                      <span>定时发布: {formatBeijingTime(announcement.scheduled_at)}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-4">
+                  <button
+                    onClick={() => toggleStatus(announcement)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      announcement.is_active
+                        ? 'text-aurora-muted hover:text-white hover:bg-aurora-card'
+                        : 'text-green-500 hover:text-green-400 hover:bg-aurora-card'
+                    }`}
+                    title={announcement.is_active ? '隐藏' : '发布'}
+                  >
+                    {announcement.is_active ? <EyeOff className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => handleOpenEdit(announcement)}
+                    className="p-2 text-aurora-muted hover:text-white hover:bg-aurora-card rounded-lg"
+                    title="编辑"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(announcement.id)}
+                    className="p-2 text-red-500 hover:text-red-400 hover:bg-aurora-card rounded-lg"
+                    title="删除"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 text-aurora-muted">
+          暂无公告
+        </div>
+      )}
+
+      {/* 添加/编辑公告弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg p-6 rounded-2xl card-luxury"
+          >
+            <h2 className="font-display text-2xl text-white mb-6">
+              {editing ? '编辑公告' : '发布公告'}
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-aurora-muted mb-2">标题</label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted"
+                  placeholder="请输入公告标题"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-aurora-muted mb-2">内容</label>
+                <textarea
+                  value={formData.content}
+                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white placeholder:text-aurora-muted resize-none"
+                  placeholder="请输入公告内容"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-aurora-muted mb-2">定时发布（可选）</label>
+                <input
+                  type="datetime-local"
+                  value={formData.scheduled_at}
+                  onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-aurora-card border border-aurora-border text-white"
+                />
+                <p className="text-aurora-muted text-xs mt-1">不设置则立即发布，北京时间</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="w-4 h-4 rounded bg-aurora-card border-aurora-border"
+                />
+                <label htmlFor="is_active" className="text-sm text-white">立即发布</label>
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={() => onEdit({ id: 'close' } as any)}
+                className="flex-1 py-3 rounded-xl border border-aurora-border text-white hover:bg-aurora-card transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-purple-500 text-white font-semibold hover:bg-purple-600 transition-colors disabled:opacity-50"
+              >
+                {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   )
