@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// 强制动态渲染
+export const dynamic = 'force-dynamic'
+
 // 初始化 Supabase 管理员客户端
 function getSupabaseAdmin() {
   return createClient(
