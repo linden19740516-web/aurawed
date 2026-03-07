@@ -19,8 +19,10 @@ export async function GET(request: NextRequest) {
 
     const allUsersData = allUsers || []
     const plannersData = allUsersData.filter((u: any) => u.user_type === 'planner')
-    const pendingPlannersData = plannersData.filter((p: any) => !p.bio)
-    const activePlannersData = plannersData.filter((p: any) => p.bio)
+    // pendingPlanners: 待审核的策划师（status = 'pending' 或没有 status 字段）
+    const pendingPlannersData = plannersData.filter((p: any) => !p.status || p.status === 'pending')
+    // activePlanners: 已批准的策划师（status = 'approved' 或 'active'）
+    const activePlannersData = plannersData.filter((p: any) => p.status === 'approved' || p.status === 'active')
 
     // 2. 获取订单数据
     const { data: allOrders, error: ordersError } = await supabase

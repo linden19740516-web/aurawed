@@ -45,6 +45,7 @@ export default function AdminPage() {
   })
   const [users, setUsers] = useState<any[]>([])
   const [planners, setPlanners] = useState<any[]>([])
+  const [plannerStatusFilter, setPlannerStatusFilter] = useState<string>('all') // all, pending, approved, rejected, inactive
   const [orders, setOrders] = useState<any[]>([])
   const [apiConfigs, setApiConfigs] = useState<any[]>([])
   const [apiConfigsLoading, setApiConfigsLoading] = useState(false)
@@ -491,7 +492,7 @@ export default function AdminPage() {
       case 'users':
         return <UsersContent users={users} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} syncStats={syncStats} onSync={syncUsers} onClearCache={clearCache} />
       case 'planners':
-        return <PlannersContent planners={planners} onRefresh={fetchData} />
+        return <PlannersContent planners={planners} onRefresh={fetchData} statusFilter={plannerStatusFilter} onStatusFilterChange={setPlannerStatusFilter} />
       case 'orders':
         return <OrdersContent orders={orders} planners={planners} loading={loading} deleting={deleting} onRefresh={fetchData} setDeleting={setDeleting} />
       case 'content':
@@ -1012,10 +1013,84 @@ function UsersContent({ users, loading, deleting, onRefresh, setDeleting, syncSt
 }
 
 // ========== 组件: 策划师管理 ==========
-function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: () => void }) {
+function PlannersContent({ planners, onRefresh, statusFilter, onStatusFilterChange }: {
+  planners: any[],
+  onRefresh: () => void,
+  statusFilter: string,
+  onStatusFilterChange: (status: string) => void
+}) {
   const [editingPlanner, setEditingPlanner] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
   const [saving, setSaving] = useState(false)
+  const [processing, setProcessing] = useState<string | null>(null)
+
+  // 审核通过
+  const handleApprove = async (plannerId: string) => {
+    if (!confirm('确定要通过该策划师的申请吗？')) return
+    setProcessing(plannerId)
+    try {
+      const response = await fetch(`/api/admin/users?id=${plannerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' })
+      })
+      const result = await response.json()
+      if (result.success) {
+        alert('审核通过！该策划师现在可以登录了。')
+        onRefresh()
+      } else {
+        alert('操作失败: ' + (result.error || '未知错误'))
+      }
+    } catch (error) {
+      console.error('审核通过失败:', error)
+      alert('操作失败')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  // 审核拒绝
+  const handleReject = async (plannerId: string) => {
+    if (!confirm('确定要拒绝该策划师的申请吗？')) return
+    setProcessing(plannerId)
+    try {
+      const response = await fetch(`/api/admin/users?id=${plannerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' })
+      })
+      const result = await response.json()
+      if (result.success) {
+        alert('已拒绝该策划师的申请。')
+        onRefresh()
+      } else {
+        alert('操作失败: ' + (result.error || '未知错误'))
+      }
+    } catch (error) {
+      console.error('审核拒绝失败:', error)
+      alert('操作失败')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  // 获取状态显示
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <span className="px-2 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400">待审核</span>
+      case 'approved':
+        return <span className="px-2 py-1 rounded-full text-xs bg-green-500/20 text-green-400">已批准</span>
+      case 'rejected':
+        return <span className="px-2 py-1 rounded-full text-xs bg-red-500/20 text-red-400">已拒绝</span>
+      case 'active':
+        return <span className="px-2 py-1 rounded-full text-xs bg-blue-500/20 text-blue-400">活跃</span>
+      case 'inactive':
+        return <span className="px-2 py-1 rounded-full text-xs bg-gray-500/20 text-gray-400">停用</span>
+      default:
+        return <span className="px-2 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400">待审核</span>
+    }
+  }
 
   // 开始编辑
   const handleStartEdit = (planner: any) => {
@@ -1065,10 +1140,30 @@ function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: 
     <div>
       <div className="flex items-center justify-between mb-8">
         <h1 className="font-display text-3xl text-white">策划师管理</h1>
+        <div className="flex items-center gap-4">
+          <select
+            value={statusFilter}
+            onChange={(e) => onStatusFilterChange(e.target.value)}
+            className="px-4 py-2 rounded-lg bg-aurora-card border border-aurora-border text-white"
+          >
+            <option value="all">全部策划师</option>
+            <option value="pending">待审核</option>
+            <option value="approved">已批准</option>
+            <option value="rejected">已拒绝</option>
+            <option value="inactive">已停用</option>
+          </select>
+        </div>
       </div>
 
+      {/* 根据状态过滤策划师 */}
+      {(() => {
+        const filteredPlanners = statusFilter === 'all'
+          ? planners
+          : planners.filter((p: any) => p.status === statusFilter || (!p.status && statusFilter === 'pending'))
+
+        return (
       <div className="grid gap-4">
-        {planners.map((planner) => (
+        {filteredPlanners.map((planner: any) => (
           <div key={planner.id} className="p-6 rounded-xl card-luxury border border-aurora-border">
             {editingPlanner === planner.id ? (
               // 编辑模式
@@ -1156,7 +1251,10 @@ function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: 
                     <Crown className="w-7 h-7 text-aurora-gold" />
                   </div>
                   <div>
-                    <div className="text-white font-medium text-lg">{planner.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-white font-medium text-lg">{planner.name}</div>
+                      {getStatusBadge(planner.status)}
+                    </div>
                     <div className="text-aurora-muted text-sm">{planner.company_name || '个人工作室'} · {planner.city || '未知'}</div>
                   </div>
                 </div>
@@ -1172,6 +1270,62 @@ function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: 
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* 待审核状态显示批准/拒绝按钮 */}
+                    {(!planner.status || planner.status === 'pending') && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(planner.id)}
+                          disabled={processing === planner.id}
+                          className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-50"
+                        >
+                          {processing === planner.id ? '处理中...' : '批准'}
+                        </button>
+                        <button
+                          onClick={() => handleReject(planner.id)}
+                          disabled={processing === planner.id}
+                          className="px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                        >
+                          拒绝
+                        </button>
+                      </>
+                    )}
+                    {/* 已批准/活跃状态显示停用按钮 */}
+                    {(planner.status === 'approved' || planner.status === 'active') && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm('确定要停用该策划师吗？')) return
+                          setProcessing(planner.id)
+                          try {
+                            const response = await fetch(`/api/admin/users?id=${planner.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'inactive' })
+                            })
+                            const result = await response.json()
+                            if (result.success) {
+                              alert('已停用该策划师')
+                              onRefresh()
+                            } else {
+                              alert('操作失败')
+                            }
+                          } finally {
+                            setProcessing(null)
+                          }
+                        }}
+                        className="px-4 py-2 rounded-lg bg-gray-500/20 text-gray-400 hover:bg-gray-500/30"
+                      >
+                        停用
+                      </button>
+                    )}
+                    {/* 已拒绝/停用状态显示重新批准按钮 */}
+                    {(planner.status === 'rejected' || planner.status === 'inactive') && (
+                      <button
+                        onClick={() => handleApprove(planner.id)}
+                        className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                      >
+                        重新批准
+                      </button>
+                    )}
                     <button
                       onClick={() => handleStartEdit(planner)}
                       className="px-4 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
@@ -1184,12 +1338,14 @@ function PlannersContent({ planners, onRefresh }: { planners: any[], onRefresh: 
             )}
           </div>
         ))}
-        {planners.length === 0 && (
+        {filteredPlanners.length === 0 && (
           <div className="text-center py-20 text-aurora-muted">
-            暂无策划师数据
+            {statusFilter === 'all' ? '暂无策划师数据' : '没有符合筛选条件的策划师'}
           </div>
         )}
       </div>
+        )
+      })()}
     </div>
   )
 }

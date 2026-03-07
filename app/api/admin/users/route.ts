@@ -30,7 +30,8 @@ export async function PUT(request: NextRequest) {
     if (body.company_name !== undefined) updateData.company_name = body.company_name
     if (body.bio !== undefined) updateData.bio = body.bio
     if (body.service_price !== undefined) updateData.service_price = body.service_price
-    // 注意：user_profiles 表没有 status 字段，不更新
+    // 添加 status 字段支持（待审核/已批准/已拒绝/活跃/停用）
+    if (body.status !== undefined) updateData.status = body.status
 
     const { data, error } = await supabaseAdmin
       .from('user_profiles')
@@ -104,6 +105,51 @@ export async function DELETE(request: NextRequest) {
     console.error('删除用户失败:', error)
     return NextResponse.json(
       { error: error.message || '删除失败' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * 获取用户列表（支持过滤）
+ * GET /api/admin/users?user_type=planner&status=pending
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const userType = searchParams.get('user_type')
+    const status = searchParams.get('status')
+
+    const supabaseAdmin = getSupabaseAdmin()
+    if (!supabaseAdmin) {
+      return NextResponse.json({ success: false, error: '服务器配置错误' }, { status: 500 })
+    }
+
+    // 构建查询
+    let query = supabaseAdmin
+      .from('user_profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (userType) {
+      query = query.eq('user_type', userType)
+    }
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('获取用户列表失败:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, data: data || [] })
+  } catch (error: any) {
+    console.error('获取用户列表失败:', error)
+    return NextResponse.json(
+      { success: false, error: error.message || '获取失败' },
       { status: 500 }
     )
   }

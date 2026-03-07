@@ -46,7 +46,8 @@ async function createPlanner() {
       email,
       name,
       user_type: 'planner',
-      city: 'Shanghai'
+      city: 'Shanghai',
+      status: 'pending' // 待审核状态，需要管理员批准后才能登录
     })
   })
 

@@ -70,7 +70,38 @@ export default function PlannerPage() {
         return
       }
 
-      // 3. 验证通过
+      // 3. 验证策划师是否已审核通过
+      try {
+        const response = await fetch(`/api/admin/users?id=${session.user.id}`)
+        const result = await response.json()
+        if (result.success && result.data && result.data.length > 0) {
+          const profile = result.data[0]
+          // 检查状态：approved 或 active 都可以登录
+          if (profile.status === 'rejected') {
+            alert('您的申请已被拒绝，请联系管理员。')
+            localStorage.removeItem('aurawed_user_type')
+            window.location.href = '/'
+            return
+          }
+          if (profile.status === 'inactive') {
+            alert('您的账号已被停用，请联系管理员。')
+            localStorage.removeItem('aurawed_user_type')
+            window.location.href = '/'
+            return
+          }
+          if (!profile.status || profile.status === 'pending') {
+            alert('您的申请正在审核中，请耐心等待管理员批准。')
+            localStorage.removeItem('aurawed_user_type')
+            window.location.href = '/'
+            return
+          }
+        }
+      } catch (err) {
+        console.error('验证策划师状态失败:', err)
+        // 如果验证失败，允许继续（兼容旧数据）
+      }
+
+      // 4. 验证通过
       setIsAuthorized(true)
     }
 
