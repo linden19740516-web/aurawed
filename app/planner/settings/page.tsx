@@ -732,8 +732,8 @@ export default function PlannerSettingsPage() {
                 .select('*')
                 .eq('planner_id', user.id)
                 .order('created_at', { ascending: false })
-                .then(({ data }) => {
-                  if (data) setPortfolioItems(data)
+                .then(({ data }: { data: unknown }) => {
+                  if (data) setPortfolioItems(data as { id: string }[])
                 })
             }
           }}
