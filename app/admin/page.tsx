@@ -1578,7 +1578,7 @@ function TagsManagementContent({
     : localTags.filter(t => t.tag_type === filterType)
 
   // 按类型分组
-  const groupedTags = filteredTags.reduce((acc, tag) => {
+  const groupedTags: Record<string, any[]> = filteredTags.reduce((acc, tag) => {
     if (!acc[tag.tag_type]) {
       acc[tag.tag_type] = []
     }
